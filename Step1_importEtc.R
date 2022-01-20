@@ -289,18 +289,11 @@ merged_data2 <-
 ###############################################################
 merged_data2 <- readRDS("~/OneDrive - The Ohio State University/Party_messaging/Data/Press_releases/StatementsWithBioClean_18jan2022.RDS")
 
-temp <- merged_data2 %>% 
-  mutate(type = ifelse(type == "sen", "Senate", "House"))
-
-temp %>% 
-  filter(chamber != type) %>% 
-  select(member_id, full_name, type, chamber, current_party, congress) %>% 
-  View()
 
 # Simplify to immediately relevant variables
 simple_df <-
   merged_data2 %>% 
-  select(member_id, congress, title_pr, date_pr, title_pr, body_pr,
+  select(member_id, congress, title_pr, date_pr, title_pr, body_pr, url_pr,
          party_atPR, current_party, state, district,
          last_name, first_name, middle_name, suffix, full_name, birthday,
          gender, type, leadership_role, leadership_dateElected,
@@ -329,7 +322,26 @@ simple_df_sessionDates <-
 
 ## TO Do: Dates look good from a minature scan
 # Can keep looking with this snippet: 
-  # simple_df_sessionDates %>% select(member_id, congress, date_pr, starts_with("session"), next_election) %>% sample_n(5)
+
+hist(x = simple_df_sessionDates$date_pr, breaks = "months")
+length(simple_df_sessionDates$date_pr > ymd("2022-01-01"))
+range(simple_df_sessionDates$date_pr, na.rm = TRUE)
+
+simple_df_sessionDates %>% filter(date_pr < session_1_startDate) %>% View()
+
+
+# Dates - remove observations where the PR date > session 2 end date
+  # Where PR data < session 1 start date, they're usually right before (like day or two)
+  # So keep them for now, if they're between election (Nov 8) and start of session
+
+#### DIDN"T Work - FIGURE THIS OUT
+simple_df_correctDates <-
+  simple_df_sessionDates %>% 
+  filter(date_pr < session_2_endDate) %>% 
+  filter(date_pr > mdy(paste0("11-08-", as.character(year(sample) - 1))))
+
+sample <- simple_df_sessionDates %>% select(session_1_startDate) %>% sample_n(1) %>% pull(.)
+
 
 # Then use this generic code to look at some random plots
 # Plots to look at frequency of press releases and check dates, etc
