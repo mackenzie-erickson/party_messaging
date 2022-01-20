@@ -333,22 +333,53 @@ simple_df_sessionDates %>% filter(date_pr < session_1_startDate) %>% View()
 # Dates - remove observations where the PR date > session 2 end date
   # Where PR data < session 1 start date, they're usually right before (like day or two)
   # So keep them for now, if they're between election (Nov 8) and start of session
-
-#### DIDN"T Work - FIGURE THIS OUT
 simple_df_correctDates <-
   simple_df_sessionDates %>% 
+  lazy_dt() %>% 
   filter(date_pr < session_2_endDate) %>% 
-  filter(date_pr > mdy(paste0("11-08-", as.character(year(sample) - 1))))
+  filter(date_pr > mdy(paste0("11-08-", as.character(year(session_1_startDate) - 1)))) %>% 
+  as_tibble()
 
-sample <- simple_df_sessionDates %>% select(session_1_startDate) %>% sample_n(1) %>% pull(.)
 
 
 # Then use this generic code to look at some random plots
 # Plots to look at frequency of press releases and check dates, etc
-unique_member_ids <- unique(merged_data2$member_id)
-for (cat in unique(x_1)){
-  d <- subset(A, x_1 == cat)
-  plot(d$z_1, d$z_2)
+unique_member_ids <- unique(simple_df_correctDates$member_id)
+for (mem in sample(unique_member_ids, 5, replace = FALSE)){
+  mytitle <- paste(unique(simple_df_correctDates[simple_df_correctDates$member_id == unique_member_ids[1],]$full_name))
+  
+  mytitle2 <- paste(
+    (simple_df_correctDates %>% 
+      filter(member_id == unique_member_ids[1]) %>% 
+      select(full_name) %>% 
+      unique() %>% 
+      pull()
+     ), "("
+    (simple_df_correctDates %>% 
+       filter(member_id == unique_member_ids[1]) %>% 
+       select(current_party) %>% 
+       unique() %>% 
+       pull()
+    ),
+    "):",
+    (simple_df_correctDates %>% 
+      filter(member_id == unique_member_ids[1]) %>% 
+      filter(congress == min(congress)) %>% 
+      select(congress) %>% 
+      unique() %>% 
+      pull()), "-",
+    (simple_df_correctDates %>% 
+       filter(member_id == unique_member_ids[1]) %>% 
+       filter(congress == max(congress)) %>% 
+       select(congress) %>% 
+       unique() %>% 
+       pull()))
+  
+  simple_df_correctDates %>% 
+    filter(member_id == mem[1]) %>% 
+    ggplot() +
+    geom_histogram(aes(x = date_pr), binwidth = 30) + # monthly (30 days)
+    ggtitle(mytitle2)
 }
 
 
