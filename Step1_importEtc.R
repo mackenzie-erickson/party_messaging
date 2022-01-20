@@ -14,7 +14,7 @@ library(ggplot2)
 library(lubridate)
 library(stringr)
 
-library(usethis)
+library(cowplot)
 
 # Specific to Step 1
 library(feather) # To load feather data from Python
