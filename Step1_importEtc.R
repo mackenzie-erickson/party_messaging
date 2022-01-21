@@ -320,8 +320,6 @@ simple_df_sessionDates <-
   
 
 
-## TO Do: Dates look good from a minature scan
-# Can keep looking with this snippet: 
 
 hist(x = simple_df_sessionDates$date_pr, breaks = "months")
 length(simple_df_sessionDates$date_pr > ymd("2022-01-01"))
@@ -342,44 +340,55 @@ simple_df_correctDates <-
 
 
 
-# Then use this generic code to look at some random plots
 # Plots to look at frequency of press releases and check dates, etc
+# For each member, plot frequency of PRs by month,
+# And assign title (e.g Zoe Lofgren (D): 113-116)
 unique_member_ids <- unique(simple_df_correctDates$member_id)
+
+
+
+
+### TO DO: min/max congress erroring out b/c of non-missing arguments?
+
+
 for (mem in sample(unique_member_ids, 5, replace = FALSE)){
-  mytitle <- paste(unique(simple_df_correctDates[simple_df_correctDates$member_id == unique_member_ids[1],]$full_name))
-  
-  mytitle2 <- paste(
+
+  # Plot title - paste full_name, party, congress tenure
+  mytitle <- paste0(
     (simple_df_correctDates %>% 
-      filter(member_id == unique_member_ids[1]) %>% 
+      filter(member_id == unique_member_ids[mem]) %>% 
       select(full_name) %>% 
       unique() %>% 
       pull()
      ), "("
     (simple_df_correctDates %>% 
-       filter(member_id == unique_member_ids[1]) %>% 
-       select(current_party) %>% 
+       filter(member_id == unique_member_ids[mem]) %>% 
+       select(party_atPR) %>% 
        unique() %>% 
        pull()
     ),
     "):",
     (simple_df_correctDates %>% 
-      filter(member_id == unique_member_ids[1]) %>% 
-      filter(congress == min(congress)) %>% 
+      filter(member_id == unique_member_ids[mem]) %>% 
+      filter(congress == min(congress, na.rm = TRUE)) %>% 
       select(congress) %>% 
       unique() %>% 
       pull()), "-",
     (simple_df_correctDates %>% 
-       filter(member_id == unique_member_ids[1]) %>% 
-       filter(congress == max(congress)) %>% 
+       filter(member_id == unique_member_ids[mem]) %>% 
+       filter(congress == max(congress, na.rm = TRUE)) %>% 
        select(congress) %>% 
        unique() %>% 
        pull()))
   
-  simple_df_correctDates %>% 
+  member_freq_plot <-
+    simple_df_correctDates %>% 
     filter(member_id == mem[1]) %>% 
     ggplot() +
     geom_histogram(aes(x = date_pr), binwidth = 30) + # monthly (30 days)
-    ggtitle(mytitle2)
+    ggtitle(mytitle)
+  
+  member_freq_plot
 }
 
 
