@@ -214,32 +214,6 @@ merged_data0 <-
          term_endDate = end_date)
 
 
-######## Party info - standardize ##########
-# Party_PR contains the party at the time of publication
-# Party_x contains the most up to date current party
-
-# Standardize party naming convention -  function
-stand_party_func <- function(x){
-  new_value = ifelse((x == "D" | x == "Democrat"), "D",
-                     ifelse((x == "I" | x == "ID" | x == "IND" | x == "Independent"), "ID",
-                            ifelse((x == "R" | x == "REP" | x == "Republican"), "R",
-                                   ifelse(x == "Libertarian", "LIB",
-                                          # else
-                                          x
-                                   ))))
-} # end party function
-
-# Standardize party naming convention - Apply function
-merged_data_cleanParty <-
-  merged_data0 %>% 
-  lazy_dt() %>% 
-  mutate(across(c(party_pr, party.x, party.y, current_party),
-                stand_party_func)) %>% 
-  as_tibble()
-###################################
-
-
-
 
 # Remove extra name columns (keeping only the complete data from leg_all)
 merged_data1 <-
@@ -300,6 +274,30 @@ simple_df <-
          at_large, bills_cosponsored, bills_sponsored,
          dw_nominate, cook_pvi, term_startDate, term_endDate, votes_against_party_pct,
          votes_with_party_pct, next_election)
+
+# Standardize 'party' variables
+# Party_PR contains the party at the time of publication
+# Party_x contains the most up to date current party
+
+# Standardize party naming convention -  function
+stand_party_func <- function(x){
+  new_value = ifelse((x == "D" | x == "Democrat"), "D",
+                     ifelse((x == "I" | x == "ID" | x == "IND" | x == "Independent"), "ID",
+                            ifelse((x == "R" | x == "REP" | x == "Republican"), "R",
+                                   ifelse(x == "Libertarian", "LIB",
+                                          # else
+                                          x
+                                   ))))
+} # end party function
+
+# Standardize party naming convention - Apply function
+simple_df <-
+  simple_df %>% 
+  lazy_dt() %>% 
+  mutate(across(c(party_atPR, current_party),
+                stand_party_func)) %>% 
+  as_tibble()
+###################################
 
 
 # Add in Congress session dates for my own reference
@@ -370,7 +368,6 @@ for (mem in sample(unique_member_ids, 5, replace = FALSE)){
        unique() %>% 
        pull()))
   
-# member_freq_plots[[mem]] <-
   (simple_df_correctDates %>% 
     filter(member_id == mem) %>% 
     ggplot() +
@@ -378,6 +375,57 @@ for (mem in sample(unique_member_ids, 5, replace = FALSE)){
     ggtitle(mytitle)) %>% 
     print()
 }
+
+
+####
+# Average PRs per month
+####
+
+# Group by member and month; count PRs per month
+avg_monthly_df <-
+    simple_df_correctDates %>%
+    group_by(member_id,
+             month = lubridate::floor_date(date_pr, "month")) %>% 
+    summarize(member_id = unique(member_id),
+              current_party = unique(current_party),
+              first_name = unique(first_name),
+              last_name = unique(last_name),
+              full_name = unique(full_name),
+              PRs_per_month = sum(length(date_pr))) %>% 
+
+# Summarize into monthly average by member
+    summarize(member_id = unique(member_id),
+              current_party = unique(current_party),
+              first_name = unique(first_name),
+              last_name = unique(last_name),
+              full_name = unique(full_name),
+              avg_monthly_pr = mean(PRs_per_month)) %>% 
+  ungroup()
+
+
+# Frequency distributions of monthly averages
+
+# All
+ggplot(avg_monthly_df) +
+  geom_histogram(aes(x = avg_monthly_pr), 
+                 bins = 50,
+                 fill = "white",
+                 color = "black")
+
+# Fewer than 50/month - current_party
+ggplot(filter(avg_monthly_df, avg_monthly_pr < 50)) +
+  geom_density(aes(x = avg_monthly_pr, color = current_party))
+
+
+# Who publishes the most frequently?
+avg_monthly_df %>% 
+  slice_max(avg_monthly_pr, n = 10)
+
+
+
+###### TO DO:
+# Time to start on pre-processing!
+# Everything else is cleaned up - time start cleaning the text :-O!
 
 
 
