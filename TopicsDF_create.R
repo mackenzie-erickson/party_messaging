@@ -31,11 +31,13 @@ setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversi
 # Republican House
 ##############################
 
+# Read in 20 topic models that were run on May 2 after removing state names
+
 # STM-format processed data (trimmed/stemmed)
-out <- readRDS(paste0(getwd(), "/Data/output/noStateNames/2022-05-02_stmPrepped_houseR.rds"))
+out.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_stmPrepped_houseR.rds"))
 
 # Fitted topics - 20 topics
-fit <- readRDS(paste0(getwd(), "/Data/output/noStateNames/2022-05-02_Fit_20topics_houseR.rds"))
+fit.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_Fit_20topics_houseR.rds"))
 
 ###
 # Democratic House
@@ -51,6 +53,10 @@ fit <- readRDS(paste0(getwd(), "/Data/output/noStateNames/2022-05-02_Fit_20topic
 ###################################################
 # Label each document with its most-probable topic
 ###################################################
+
+# Function to label each document with most-propable topic
+
+label_statement_topics.fns <- function(fit, out){
 
 # Make a data.table of topic proportions
 topics_DT <- make.dt(fit, meta = out$meta)
@@ -112,31 +118,37 @@ topics.df <-
   select(-c(contains("_leader"), contains("_titles"),
             contains("_taskforces"), contains("_member")))
 
-# Read in caucus info
-factions <- readxl::read_xlsx(paste0(getwd(), "/Data/Other/factionsSimple_113_116.xlsx"))
+###########
+# Caucus info temporarily not added back in
+# Data provided by William may include this
+# Or, it can be added at a later date (i.e. for 3rd chapter)
+##########
 
-# Subset to relevant vars
-faction_vars <- factions %>% 
-  select(bioguide_id, congress, contains("_leader"), contains("_titles"),
-         contains("_taskforces"), contains("_member"))
-
-# Subset to one observation per bioguide_id-congress
-# Prioritize caucus = 1
-# (i.e. if they left a caucus halfway through a congress, just code them as 1 for the whole congress)
-faction_vars <-
-  faction_vars %>% 
-  group_by(bioguide_id, congress) %>% 
-  arrange(across(where(is.numeric), desc)) %>% # Put 1s first
-  distinct(bioguide_id, congress, .keep_all = TRUE)
-  
-
-
-# Merge back onto topics.df
-topics.df <-
-  topics.df %>% 
-  left_join(., faction_vars,
-            by = c("member_id" = "bioguide_id",
-                   "congress" = "congress"))
+# # Read in caucus info
+# factions <- readxl::read_xlsx(paste0(getwd(), "/Data/Other/factionsSimple_113_116.xlsx"))
+# 
+# # Subset to relevant vars
+# faction_vars <- factions %>% 
+#   select(bioguide_id, congress, contains("_leader"), contains("_titles"),
+#          contains("_taskforces"), contains("_member"))
+# 
+# # Subset to one observation per bioguide_id-congress
+# # Prioritize caucus = 1
+# # (i.e. if they left a caucus halfway through a congress, just code them as 1 for the whole congress)
+# faction_vars <-
+#   faction_vars %>% 
+#   group_by(bioguide_id, congress) %>% 
+#   arrange(across(where(is.numeric), desc)) %>% # Put 1s first
+#   distinct(bioguide_id, congress, .keep_all = TRUE)
+#   
+# 
+# 
+# # Merge back onto topics.df
+# topics.df <-
+#   topics.df %>% 
+#   left_join(., faction_vars,
+#             by = c("member_id" = "bioguide_id",
+#                    "congress" = "congress"))
 
 
 #####################################################################
@@ -158,114 +170,63 @@ topics.df <-
   left_join(labels.df, by = "topic") %>% 
   as.data.frame()
 
-
-# Save df with topics labeled
-# saveRDS(topics.df, paste0(getwd(), "/Data/output/2022-04-25_TopicsDF_HouseD.rds"))
+} # End label_statement_topics.fns function
 
 
-#####################################################################
-# Explore topics
+###############
+# Apply topic label function
+##############
+topics_df.R <- 
+  label_statement_topics.fns(
+    fit = fit.R, 
+    out = out.R)
 
-######
-# Find thoughts
-#####
-
-# PR body data (for finding thoughts)
-body <- readRDS("~/OneDrive - The Ohio State University/Party_messaging/Data/Press_releases/2022-04_BodyData_HouseR.RDS")
-
-
-# Body - Attach the PR body to the dataframe
-topics.df_withBody <- 
-  left_join(x = topics.df
-            , y = select(body, indx, body_pr)
-            , by = c("indx" = "indx")
-            )
-
-saveRDS(topics.df_withBody, paste0(getwd(), "/Data/output/2022-04-25_TopicsDF_HouseR_withBody.rds"))
-
-
-# Return the top n documents for a topic
-top_thoughts <- findThoughts(fit, texts = topics.df$body_pr, topics = 4, n = 1)
-
-plotQuote(top_thoughts, text.cex = 0.5, width = 100, main = labels.df$topic_label[4])
-
-
-
-
-
-# Pull samples
-topics.df %>% sample_n(1) %>% select(topic, topic_label, title_pr)
-
-
+# # Save df with topics labeled
+# saveRDS(topics_df.R, paste0(getwd(), "/Data/output/2022-06-20_TopicLabeled_DF_HouseR.rds"))
+# topics_df.R <- readRDS(paste0(getwd(), "/Data/output/2022-06-20_TopicLabeled_DF_HouseR.rds"))
 
 
 
 ############################################################
-# Prepare data for network
+# Calculate member eigens for each congress - Function
 
+# Summary:
+  # 1. Filter to one congress (this can be changed to sessions)
+  # 2. Keep only the first use of each topic for each member
+  # 3. Turn data into cascade format for NetInf
+  # 4. Estimate the network structure using NetInf
+  # 5. Calculate each member's eigencentrality for the congress
+  # 6. Simply the dataframe to output 3 columns (bioguide_id, eigen score, congress)
 
-# Filter to one congress session - 1st session 116th
-topics116_session1 <- 
+# Start Function
+estimateNetwork_outputEigens.fns <- function(topics.df, congressNum){
+
+# Filter to one congress session
+topics.congress <- 
   topics.df %>% 
-  filter(congress == 116) %>% 
-  filter(date_pr >= session_1_startDate & date_pr <= session_1_endDate)
+  filter(congress == congressNum)
 
-# Each topic needs one adoption date
+# Select the first use of each topic by member
 # Group by topic, then by member
-# NOTE: This may need to change
-
-# # Keep use with highest topic prob
-# mostProb.obs_116.1 <- 
-#   topics116_session1 %>% 
-#   group_by(topic, member_id) %>% 
-#   arrange(desc(topic_prob), .by_group = TRUE) %>% 
-#   distinct(member_id, topic, .keep_all = TRUE)
-
-
 # Keep first use
-first.obs_116.1 <- 
-  topics116_session1 %>% 
+first.obs <- 
+  topics.congress %>% 
   group_by(topic, member_id) %>% 
   arrange(date_pr, .by_group = TRUE) %>% 
   distinct(member_id, topic, .keep_all = TRUE)
 
 
-
 ##############################
-# Prep data for NetInf - firsttopic use
+# Prep data for NetInf
 ##############################
 
 # Transform into a cascades object
-cascades_firstObs_116.1 <- as_cascade_long(
-  data = first.obs_116.1
+congress_Cascade <- as_cascade_long(
+  data = first.obs
   , cascade_node_name = 'member_id'
   , event_time = 'date_pr'
   , cascade_id = 'topic'
 )
-
-
-# Inspect
-summary(cascades_firstObs_116.1)
-
-# Plot
-# Subset in time
-time_contrained <- subset_cascade_time(cascade = cascades_firstObs_116.1
-                                       , start_time = ymd("2019-01-01")
-                                       , end_time = ymd("2019-03-25"))
-
-plot(time_contrained
-     , label_nodes = TRUE
-     , selection = "9"
-     , guide = "none"
-     , max.overlaps = 10)
-
-
-png(paste0(getwd(), "/Data/output/cascadePlots/houseR_116.1_firstObsTopic.png"))
-plot(cascades_firstObs_116.1, label_nodes = FALSE) +
-  ggtitle("Date of first-use of topic by member"
-          , subtitle = "House Republicans - 1st session of the 116th congress") +
-  labs(x = "Topic cascade", y = "Jan 3, 2019 - Jan 3, 2020")
-dev.off()
 
 
 ###############################################
@@ -276,23 +237,12 @@ dev.off()
 # Select parameters automatically
 
 auto.netinf.result <- netinf(
-  cascades = cascades_firstObs_116.1
+  cascades = congress_Cascade
   , trans_mod = "exponential"
   , p_value_cutoff = 0.1
   # , params = 0.5 # lambda/rate
   )
 
-# Number of edges (above p-value cutoff)
-nrow(auto.netinf.result)
-
-# See the directed edges and improvements
-head(auto.netinf.result)
-plot(auto.netinf.result, type = "improvement")
-# p-value from the Vuong test associated with each edge addition
-plot(auto.netinf.result, type = "p-value")
-
-# Visualize diffusion network
-plot(auto.netinf.result, type = "network")
 
 
 ##################################################################
@@ -305,49 +255,201 @@ netinf.graph <-
   graph_from_data_frame()
 
 # Calculate eigenvector centrality
-eigens_116.1 <- eigen_centrality(
+eigens_result <- eigen_centrality(
   graph = netinf.graph
   , directed = TRUE
   , scale = TRUE
   , weights = NULL
 )
 
-###############################################################
-# Regression
-# Who is most likely to be central?
 
 # Pull out eigen values and member_id
-eigens_116.1_df <- data.frame(
-  member_id = names(eigens_116.1$vector),
-  eigen_value = unname(eigens_116.1$vector)
+eigens_df <- data.frame(
+  member_id = names(eigens_result$vector),
+  eigen_value = unname(eigens_result$vector),
+  congress = congressNum
 )
 
-# Pull out member info from congress session data
-member_data_116.1 <- first.obs_116.1 %>% 
-  ungroup() %>% 
-  select(member_id,
-         party_atPR,
-         state,
-         last_name, first_name, full_name,
-         birthday,
-         gender,
-         leadership_role, leadership_dateElected,
-         at_large,
-         bills_sponsored,
-         bills_cosponsored,
-         dw_nominate,
-         cook_pvi,
-         votes_with_party_pct, votes_against_party_pct,
-         next_election,
-         contains("_leader"),
-         contains("_titles"),
-         contains("_taskforces"),
-         contains("_member")
-         )
 
-member_data_116.1 <- 
-  member_data_116.1 %>% 
-  distinct(.keep_all = TRUE)
+} # End estimateNetwork_outputEigens.fns
+
+##########################################################
+
+
+# Apply function to congresses
+eigens_113 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+                                               , congressNum = 113)
+
+eigens_114 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+                                               , congressNum = 114)
+
+eigens_115 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+                                               , congressNum = 115)
+
+eigens_116 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+                                               , congressNum = 116)
+
+# Merge data together
+eigens_all <- bind_rows(eigens_113, eigens_114, eigens_115, eigens_116)
+
+
+###############################################################
+# Figures, Tests
+  # 1. Are eigens correlated for individuals across congresses? - Not really
+
+
+# Are eigens correlated for individuals across congresses?
+# Spread data into columns of members with rows being years (values being their different eigens)
+eigens_wide <- 
+  eigens_all %>%
+  spread(member_id, eigen_value) %>%
+  select(-congress) 
+
+# And then calculate the correlation
+eigenCors_acrossCongresses <- 
+  apply(eigens_wide, 2, function(x) {
+    cor(x, seq.int(nrow(eigens_wide)))
+  })
+
+# Turn into df
+eigenCors <- 
+  eigenCors_acrossCongresses %>% 
+  as.data.frame()
+names(eigenCors) <- "cors"
+
+
+# Plot histogram of absolute value of corrs
+ggplot(data = eigenCors) +
+  geom_histogram(aes(abs(cors)), bins= 50) +
+  ggtitle("Correlation between Repub member's centrality across congresses"
+          , subtitle = "Centrality does not appear very correlated across congresses") +
+  labs(x = "abs(Correlation)", y = "")
+
+##########################################################
+
+# Merge in legislator data
+eigens_legData <- 
+  inner_join(x = eigens_all
+            , y = out.R$meta
+            , by = c("member_id", "congress"))
+
+#####
+# Correlation matrix
+####
+
+# Filter to numeric, and features that make sense
+corr_mat_features <-
+  eigens_legData %>% 
+  select(eigen_value, congress, state, gender, leadership_role, bills_cosponsored
+         , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
+         , next_election, switched_party, contains("_member"))
+
+###
+# Mutate variables to be more suitable for regression (factors, simplifying)
+###
+
+# Leadership role - split into Speaker and Leadership_other factors
+corr_mat_features_mutated1 <-
+  corr_mat_features %>% 
+  mutate(speaker = ifelse(leadership_role == "Speaker of the House", 1, 0)
+         , speaker = ifelse(is.na(speaker) == TRUE, 0, speaker)
+         , leadership_other = ifelse(leadership_role %in% c(
+           "Republican Caucus Chariman"
+           , "House Minority Leader"
+           , "Republican Whip"
+           , "House Majority Leader"
+         ), 1, 0)
+         ) %>% 
+  select(-leadership_role) %>% 
+  mutate(speaker = as.factor(speaker)
+         , leadership_other = as.factor(leadership_other))
+
+# gender - change to factor
+corr_mat_features_mutated2 <-
+  corr_mat_features_mutated1 %>% 
+  mutate(female = ifelse(gender == "F", 1, 0)) %>% 
+  mutate(female = as.factor(female)) %>% 
+  select(-gender)
+
+# Cooks pvi
+# Turn into numeric R is positive and D is negative
+
+####### NOTE: Currently, cook_pvi is only for congress 116
+  # Therefore, the below code doens't work b/c it filters the data
+  # to only the 116th congress
+
+# cookpvi_D <-
+#   corr_mat_features_mutated2 %>%
+#   filter(str_detect(cook_pvi, "D")) %>% 
+#   mutate(cook_pvi = gsub("D\\+", "", cook_pvi)) %>% 
+#   mutate(cook_pvi = paste0("-", cook_pvi)) %>% 
+#   mutate(cook_pvi = as.numeric(cook_pvi))
+# 
+# cookpvi_R <-
+#   corr_mat_features_mutated2 %>%
+#   filter(str_detect(cook_pvi, "R")) %>% 
+#   mutate(cook_pvi = gsub("R\\+", "", cook_pvi)) %>% 
+#   mutate(cook_pvi = as.numeric(cook_pvi))
+# 
+# # Merge back together
+# corr_mat_features_mutated3 <-
+#   bind_rows(cookpvi_D
+#             , cookpvi_R)
+
+# next_election = years til next election
+corr_mat_features_mutated4 <-
+  corr_mat_features_mutated2 %>% 
+  mutate(congress_year = ifelse(congress == 113, 2014
+                                , ifelse(congress == 114, 2016
+                                         , ifelse(congress == 115, 2018
+                                                  , ifelse(congress == 116, 2020
+                                                           , NA))))) %>% 
+  mutate(years_til_nextElection = next_election - congress_year) %>% 
+  mutate(election_year = as.factor(ifelse(years_til_nextElection == 0, 1, 0))) %>% 
+  select(-c(next_election, years_til_nextElection, congress_year))
+
+# remove unnecessarily variables
+corr_mat_features_mutated4 <-
+  corr_mat_features_mutated4 %>% 
+  select(-c(state, switched_party, cook_pvi, congress))
+
+# convert memberships to factors
+corr_mat_features_mutated5 <-
+  corr_mat_features_mutated4 %>% 
+  mutate(across(contains("_member"), as.factor))
+
+# remove memberships with only one level (no one is a member)
+corr_mat_features_mutated6 <-
+  corr_mat_features_mutated6 %>% 
+  select(across(contains("_member"), ))
+
+
+mod1 <- lm(eigen_value ~ ., data = corr_mat_features_mutated5)
+
+
+# Maybe average centrality by member (average across congress?) or just leave congress out
+
+# leadership_role - change to 2 vars (Speaker, and Leadership role Other)
+# gender - change to factor
+# state - remove (maybe include state population or something)
+# cook_pvi - what's up with this? why is it character?
+# next_election - time til next election (next electio year - congress start year)
+# switched party - maybe remove (it looks like it's all NA anyway)
+# contains("_member") - factor; remove ones that are all zero - this might be different
+  # for Dems, so make sure it's not by variable name, it's by if all zero
+
+# also, normalize everything?
+
+
+
+str(corr_mat_features)
+
+
+
+
+# Pull out member info from congress session data
+
+
 
 
 # Join eigen values onto df
