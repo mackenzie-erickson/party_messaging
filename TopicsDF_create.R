@@ -199,7 +199,7 @@ topics_df.R <-
   # 6. Simply the dataframe to output 3 columns (bioguide_id, eigen score, congress)
 
 # Start Function
-estimateNetwork_outputEigens.fns <- function(topics.df, congressNum){
+first.obs.fun <- function(topics.df, congressNum){
 
 # Filter to one congress session
 topics.congress <- 
@@ -215,10 +215,14 @@ first.obs <-
   arrange(date_pr, .by_group = TRUE) %>% 
   distinct(member_id, topic, .keep_all = TRUE)
 
+} # end first.obs.fun
+
 
 ##############################
-# Prep data for NetInf
+# Prep data for NetInf - Function
 ##############################
+
+estimateNetwork_outputEigens.fns <- function(first.obs, congressNum){
 
 # Transform into a cascades object
 congress_Cascade <- as_cascade_long(
@@ -227,6 +231,7 @@ congress_Cascade <- as_cascade_long(
   , event_time = 'date_pr'
   , cascade_id = 'topic'
 )
+
 
 
 ###############################################
@@ -263,7 +268,7 @@ eigens_result <- eigen_centrality(
 )
 
 
-# Pull out eigen values and member_id
+# Pull out eigen values, member_id, congress, and index
 eigens_df <- data.frame(
   member_id = names(eigens_result$vector),
   eigen_value = unname(eigens_result$vector),
@@ -275,67 +280,78 @@ eigens_df <- data.frame(
 
 ##########################################################
 
+# Create datasets of first.obs by congress
+firstObs_113 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 113)
 
-# Apply function to congresses
-eigens_113 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+firstObs_114 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 114)
+
+firstObs_115 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 115)
+
+firstObs_116 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 116)
+
+set.seed(4444)
+# Apply functions to congresses
+eigens_113 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_113
                                                , congressNum = 113)
 
-eigens_114 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+eigens_114 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_114
                                                , congressNum = 114)
 
-eigens_115 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+eigens_115 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_115
                                                , congressNum = 115)
 
-eigens_116 <- estimateNetwork_outputEigens.fns(topics.df = topics_df.R
+eigens_116 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_116
                                                , congressNum = 116)
 
 # Merge data together
 eigens_all <- bind_rows(eigens_113, eigens_114, eigens_115, eigens_116)
 
 
-###############################################################
-# Figures, Tests
-  # 1. Are eigens correlated for individuals across congresses? - Not really
-
-
-# Are eigens correlated for individuals across congresses?
-# Spread data into columns of members with rows being years (values being their different eigens)
-eigens_wide <- 
-  eigens_all %>%
-  spread(member_id, eigen_value) %>%
-  select(-congress) 
-
-# And then calculate the correlation
-eigenCors_acrossCongresses <- 
-  apply(eigens_wide, 2, function(x) {
-    cor(x, seq.int(nrow(eigens_wide)))
-  })
-
-# Turn into df
-eigenCors <- 
-  eigenCors_acrossCongresses %>% 
-  as.data.frame()
-names(eigenCors) <- "cors"
-
-
-# Plot histogram of absolute value of corrs
-ggplot(data = eigenCors) +
-  geom_histogram(aes(abs(cors)), bins= 50) +
-  ggtitle("Correlation between Repub member's centrality across congresses"
-          , subtitle = "Centrality does not appear very correlated across congresses") +
-  labs(x = "abs(Correlation)", y = "")
 
 ##########################################################
 
 # Merge in legislator data
+
+
+# Get one distict bio info for each member-congress
+meta_data <-
+  out.R$meta %>% 
+  # Select just vars that are consistent across member-congress
+  select(member_id, congress, state, gender, leadership_role, bills_cosponsored
+         , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
+         , next_election, switched_party, contains("_member")) %>% 
+  distinct(member_id, congress)
+  
+
 eigens_legData <- 
-  inner_join(x = eigens_all
-            , y = out.R$meta
+  left_join(x = eigens_all
+            , y = meta_data
             , by = c("member_id", "congress"))
 
-#####
-# Correlation matrix
-####
+
+
+###########################################################
+# How early in a congress is the majority of members' first-use of topics?
+
+#### This would have to be done earlier
+# Like split out the function
+# Use the first.obs df, and return that
+# Then use that to plot
+
+
+###########################################################
+
+
+
+#######################################################
+# Clean up variables for regression
+#######################################################
+
+
 
 # Filter to numeric, and features that make sense
 corr_mat_features <-
@@ -396,49 +412,106 @@ corr_mat_features_mutated2 <-
 #   bind_rows(cookpvi_D
 #             , cookpvi_R)
 
-# next_election = years til next election
-corr_mat_features_mutated4 <-
-  corr_mat_features_mutated2 %>% 
-  mutate(congress_year = ifelse(congress == 113, 2014
-                                , ifelse(congress == 114, 2016
-                                         , ifelse(congress == 115, 2018
-                                                  , ifelse(congress == 116, 2020
-                                                           , NA))))) %>% 
-  mutate(years_til_nextElection = next_election - congress_year) %>% 
-  mutate(election_year = as.factor(ifelse(years_til_nextElection == 0, 1, 0))) %>% 
-  select(-c(next_election, years_til_nextElection, congress_year))
 
-# remove unnecessarily variables
+# Also didn't work:::
+#
+# # next_election = years til next election
+# corr_mat_features_mutated4 <-
+#   corr_mat_features_mutated2 %>% 
+#   mutate(congress_year = ifelse(congress == 113, 2014
+#                                 , ifelse(congress == 114, 2016
+#                                          , ifelse(congress == 115, 2018
+#                                                   , ifelse(congress == 116, 2020
+#                                                            , NA))))) %>% 
+#   mutate(years_til_nextElection = next_election - congress_year) %>% 
+#   mutate(election_year = as.factor(ifelse(years_til_nextElection == 0, 1, 0))) %>% 
+#   select(-c(next_election, years_til_nextElection, congress_year))
+
+# remove unnecessarily variables/ones that didn't work
+corr_mat_features_mutated3 <-
+  corr_mat_features_mutated2 %>% 
+  select(-c(state, switched_party, cook_pvi, congress, next_election))
+
+
+
+# Remove faction memberships that are all zeros (no Republicans)
+no_repub_factions <- c("jd_member", "cpc_member", "pop_member", 
+                       "ndc_member", "bdc_member")
+
 corr_mat_features_mutated4 <-
-  corr_mat_features_mutated4 %>% 
-  select(-c(state, switched_party, cook_pvi, congress))
+  corr_mat_features_mutated3 %>% 
+  select(-any_of(no_repub_factions))
+
 
 # convert memberships to factors
 corr_mat_features_mutated5 <-
   corr_mat_features_mutated4 %>% 
   mutate(across(contains("_member"), as.factor))
 
-# remove memberships with only one level (no one is a member)
-corr_mat_features_mutated6 <-
-  corr_mat_features_mutated6 %>% 
-  select(across(contains("_member"), ))
+# Scale IVs
+dat <-
+  corr_mat_features_mutated5 %>% 
+  mutate(across(where(is.numeric), scale))
 
 
-mod1 <- lm(eigen_value ~ ., data = corr_mat_features_mutated5)
+mod1 <- lm(eigen_value ~ 
+             bills_cosponsored +
+             bills_sponsored +
+             dw_nominate +
+             votes_with_party_pct +
+             female +
+             speaker +
+             leadership_other
+           , data = corr_mat_features_mutated5)
+
+summary(mod1)
 
 
-# Maybe average centrality by member (average across congress?) or just leave congress out
 
-# leadership_role - change to 2 vars (Speaker, and Leadership role Other)
-# gender - change to factor
-# state - remove (maybe include state population or something)
-# cook_pvi - what's up with this? why is it character?
-# next_election - time til next election (next electio year - congress start year)
-# switched party - maybe remove (it looks like it's all NA anyway)
-# contains("_member") - factor; remove ones that are all zero - this might be different
-  # for Dems, so make sure it's not by variable name, it's by if all zero
 
-# also, normalize everything?
+
+
+
+
+
+###############################################################
+# Figures, Tests
+# 1. Are eigens correlated for individuals across congresses? - Not really
+
+
+# Are eigens correlated for individuals across congresses?
+# Spread data into columns of members with rows being years (values being their different eigens)
+eigens_wide <- 
+  eigens_all %>%
+  spread(member_id, eigen_value) %>%
+  select(-congress) 
+
+# And then calculate the correlation
+eigenCors_acrossCongresses <- 
+  apply(eigens_wide, 2, function(x) {
+    cor(x, seq.int(nrow(eigens_wide)))
+  })
+
+# Turn into df
+eigenCors <- 
+  eigenCors_acrossCongresses %>% 
+  as.data.frame()
+names(eigenCors) <- "cors"
+
+
+# Plot histogram of absolute value of corrs
+ggplot(data = eigenCors) +
+  geom_histogram(aes(abs(cors)), bins= 50) +
+  ggtitle("Correlation between Repub member's centrality across congresses"
+          , subtitle = "Centrality does not appear very correlated across congresses") +
+  labs(x = "abs(Correlation)", y = "")
+
+
+# End Tests/Experiments Section
+#################################################################
+
+
+
 
 
 
