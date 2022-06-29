@@ -28,7 +28,14 @@ setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversi
 #################
 
 ###
-# Republican House
+# Legislative covariates
+##############################
+
+leg_covariates.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/from_williams/legislative_covariates.rds"))
+
+
+###
+# Press releases - Republican House
 ##############################
 
 # Read in 20 topic models that were run on May 2 after removing state names
@@ -40,7 +47,7 @@ out.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_
 fit.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_Fit_20topics_houseR.rds"))
 
 ###
-# Democratic House
+# Press releases - Democratic House
 #############################
 
 # # STM-format processed data (trimmed/stemmed)
@@ -143,7 +150,7 @@ topics.df <-
 # Remove 2021 press releases (there are only 8, compared to 20k for the others)
 topics.df <-
   topics.df %>% 
-  filter(year(date_pr) != 2021)
+  filter(date_pr < ymd("2021-01-01"))
 
 } # End label_statement_topics.fns function
 
@@ -181,6 +188,30 @@ first.obs <-
 
 } # end first.obs.fun
 
+###############
+# Apply Function: First topic observations by member
+##############
+
+
+firstObs_113 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 113)
+
+firstObs_114 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 114)
+
+firstObs_115 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 115)
+
+firstObs_116 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 116)
+
+# Pull all firstObs together
+firstObs_all <- bind_rows(firstObs_113, firstObs_114, firstObs_115, firstObs_116)
+
+
+
+
+
 
 ##############################
 # NetInf Function
@@ -191,6 +222,7 @@ first.obs <-
 ##############################
 
 estimateNetwork_outputEigens.fns <- function(first.obs, congressNum){
+  
 
 #######
 # Transform into a cascades object
@@ -202,7 +234,28 @@ congress_Cascade <- as_cascade_long(
   , event_time = 'date_pr'
   , cascade_id = 'topic'
 )
-
+  
+  # # Investigate cascades - just playing around
+  # summary(congress_Cascade)
+  # 
+  # # Convert event times to dates
+  # cascades_dates <-
+  #   congress_Cascade %>% 
+  #   modify_depth(2) %>% 
+  #   mutate(event_time = as.Date(event_time, origin = "1970-01-01"))
+  # 
+  # 
+  # # Visualize cascades
+  # cascade_ids <- unique(first.obs$topic)
+  # selection <- cascade_ids[c(1)]
+  # plot(congress_Cascade, label_nodes = TRUE, selection = selection)
+  # 
+  # p <- plot(congress_Cascade
+  #      , label_nodes = TRUE
+  #      , selection = 1)
+  # 
+  # p + 
+  #   scale_x_date()
 
 #######
 # Infer edges based on a diffusion model
@@ -255,38 +308,13 @@ eigens_df <- data.frame(
 ##########################################################
 
 
-###############
-# Apply functions
-  # First topic observations by member
-  # Eigencentrality 
-##############
-
-#######
-# First observation of topic by member-congress
-#######
-
-firstObs_113 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 113)
-
-firstObs_114 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 114)
-
-firstObs_115 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 115)
-
-firstObs_116 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 116)
-
-# Pull all firstObs together
-firstObs_all <- bind_rows(firstObs_113, firstObs_114, firstObs_115, firstObs_116)
-
 
 
 #######
-# Estimate network/eigencentrality
+# Apply Function: Estimate network/eigencentrality
 #######
 
-set.seed(4444)
+set.seed(4445)
 
 eigens_113 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_113
                                                , congressNum = 113)
@@ -305,25 +333,304 @@ eigens_all <- bind_rows(eigens_113, eigens_114, eigens_115, eigens_116)
 
 
 
+###############################################################
+# COVARIATES - Create
+
+###
+# William Minozzi covariates
+###
+
+# Filter covariates to just 113-116 congress (both Repubs and Dems)
+leg_covs <-
+  leg_covariates.raw %>% 
+  filter(congress %in% c(113:116)) %>% 
+  filter(chamber == "H") %>% 
+  as_tibble()
+
+# Create "white" variable
+leg_covs <-
+  leg_covs %>% 
+  mutate(white = ifelse(race_ethnicity == "White", 1, 0))
+
+# Scale unscaled variables
+leg_covs <-
+  leg_covs %>% 
+  mutate(scale_speeches_daily = scale(n_speeches_daily))
+
+###
+# ProPublica covariates
+###
+
+# Pull in ProPublica data from STM
+propubdat <- out.R$meta
+
+# Pull out relevant vars
+propubdat.relevant <-
+  propubdat %>% 
+  select(member_id
+         , congress
+         , bills_sponsored
+         , bills_cosponsored
+         , contains("_member")
+         , votes_with_party_pct)
+
+# Mutate relevant vars
+propubdat.relevant <-
+  propubdat.relevant %>% 
+  mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
+         , scale_bills_cosponsored = scale(bills_cosponsored) # scale
+         , scale_votes_with_party_pct = scale(votes_with_party_pct)
+         , caucus_member = 
+           # dummy for member of any caucus
+           ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
+  ) %>% 
+  select(member_id
+         , congress
+         , bills_sponsored
+         , bills_cosponsored
+         , votes_with_party_pct
+         , scale_bills_sponsored
+         , scale_bills_cosponsored
+         , scale_votes_with_party_pct
+         , caucus_member)
+
+# Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
+# Just select the correct ones so there is one member-congress only
+propubdat.relevantFixed <-
+  propubdat.relevant %>% 
+  group_by(member_id, congress) %>% 
+  arrange(desc(bills_cosponsored)
+          , desc(bills_sponsored)
+          , desc(caucus_member)
+          , desc(votes_with_party_pct)) %>% 
+  distinct(member_id, congress, .keep_all = TRUE)
+
+###
+# Merge covariate DFs
+###
+
+# Join ProPub (just Repubs) with leg_covs (Repubs and Dems)
+covariates.df <-
+  left_join(
+    propubdat.relevantFixed
+    , leg_covs
+    , by = c("member_id" = "bioguide_id"
+             , "congress" = "congress")
+  )
+
+
 ##########################################################
-# Merge eigencentrality.df with leg_data
+# Regressions: 
 ###########################################################
 
 
-# Get one distict bio info for each member-congress
-meta_data <-
-  out.R$meta %>% 
-  # Select just vars that are consistent across member-congress
-  select(member_id, congress, state, gender, leadership_role, bills_cosponsored
-         , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
-         , next_election, switched_party, contains("_member")) %>% 
+####
+# Merge eigencentrality.df with leg_data
+####
+
+# # Filter covariates to just 113-116 congress
+# leg_covs <-
+#   leg_covariates.raw %>% 
+#   filter(congress %in% c(113:116)) %>% 
+#   as_tibble()
+# 
+# # Create "white" variable
+# leg_covs <-
+#   leg_covs %>% 
+#   mutate(white = ifelse(race_ethnicity == "White", 1, 0))
+# 
+# # Scale unscaled variables
+# leg_covs <-
+#   leg_covs %>% 
+#   mutate(scale_speeches_daily = scale(n_speeches_daily))
+
+# Merge covariates with eigens df
+eigensTopics_legCovs <-
+  left_join(
+    eigens_all
+    , leg_covs,
+    by = c("member_id" = "bioguide_id"
+           , "congress" = "congress")
+  )
+
+# # Pull in ProPublica data (should be moved probably)
+# propubdat <- out.R$meta
+# 
+# # Pull out relevant vars
+# propubdat.relevant <-
+#   propubdat %>% 
+#   select(member_id
+#          , congress
+#          , bills_sponsored
+#          , bills_cosponsored
+#          , contains("_member"))
+# 
+# # Mutate relevant vars
+# propubdat.relevant <-
+#   propubdat.relevant %>% 
+#   mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
+#          , scale_bills_cosponsored = scale(bills_cosponsored) # scale
+#          , caucus_member = 
+#            # dummy for member of any caucus
+#            ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
+#          ) %>% 
+#   select(member_id
+#          , congress
+#          , bills_sponsored
+#          , bills_cosponsored
+#          , scale_bills_sponsored
+#          , scale_bills_cosponsored
+#          , caucus_member)
+
+# Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
+# Just select the correct ones so there is one member-congress only
+propubdat.relevantFixed <-
+  propubdat.relevant %>% 
+  group_by(member_id, congress) %>% 
+  arrange(desc(bills_cosponsored), desc(bills_sponsored), desc(caucus_member)) %>% 
   distinct(member_id, congress, .keep_all = TRUE)
+
+
+# Merge ProPub dat onto eigensTopics_legCovs
+eigensTopics_legCovs <-
+  left_join(
+    eigensTopics_legCovs
+    , propubdat.relevantFixed
+    , by = c("member_id" = "member_id"
+             , "congress" = "congress")
+  )
   
 
-eigens_legData <- 
-  left_join(x = eigens_all
-            , y = meta_data
-            , by = c("member_id", "congress"))
+# Transform eigen value to make more readable (multiple by 100)
+eigensTopics_legCovs <-
+  eigensTopics_legCovs %>% 
+  mutate(eigen_value_100 = eigen_value * 100)
+
+####
+# Models
+####
+
+# Main variables (nominate, leadership, gender, race)
+modT.mainCovs <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(woman)
+  + as.factor(white)
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.mainCovs)
+
+# Main vars + more identity variables
+modT.addIdentity <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(poc_woman)
+  + as.factor(poc_man)
+  + as.factor(majority_party)
+  + as.factor(unopposed)
+  + proximity_to_floor_centroid
+  + as.factor(caucus_member)
+
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.addIdentity)
+
+# Main vars + more behavioral vars
+modT.addBehavioral <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.addBehavioral)
+
+
+summary(modT.mainCovs)
+summary(modT.addIdentity)
+summary(modT.addBehavioral)
+
+
+########################################################################
+
+
+##################################
+# Look at bar charts to see if anything stands out as highly correlated (factors)
+
+# Topics
+eigensTopics_legCovs %>%
+  ggplot( aes(x=eigen_value, fill=as.factor(party_leadership))) +
+  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity') +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  labs(fill="")
+
+# Frames
+eigens_legCovs %>%
+  ggplot( aes(x=eigen_value, fill=as.factor(party_leadership))) +
+  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity') +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  labs(fill="")
+
+##################################
+# Look at scatterplots to see if anything stands out as highly correlated (continuous)
+
+# Topics
+eigensTopics_legCovs %>% 
+  ggplot(aes(x = eigen_value, y = nominate_dim2)) +
+  geom_point(aes(fill = as.factor(republican)))
+
+
+
+
+
+
+# Regression table
+mod2 <- lm(
+  eigen_value_100 ~
+    proximity_to_floor_centroid_zero_code_missingness
+  + scale_leslag_zero_code_missingness
+  + scale_benchratiolag
+  + scale_votepct
+  + party_leadership
+  + committee_leadership
+  + unopposed
+  + majority_party
+  + nominate_dim1
+  + nominate_dim2
+  + scale_seniority
+  + woman
+  + white
+  , data = eigens_legCovs
+)
+
+summary(mod2)
+
 
 
 
@@ -862,6 +1169,17 @@ topicsFrames.R %>%
 
 
 
+# There are only 556 observations of people using the main frame within each topic
+# As op
+# This means that the main frame is probably not that "main"/popular
+
+data %>%
+  group_by(month) %>%
+  mutate(per =  100 *count/sum(count)) %>% 
+  ungroup
+
+
+
 ############################################################
 # Function: First Observation of TOPIC-FRAME usage by memeber
 ############################################################
@@ -1050,20 +1368,88 @@ frame.eigens_all <- bind_rows(frame.eigens_113
 ###########################################################
 
 
-# Get one distict bio info for each member-congress
-meta_data <-
-  out.R$meta %>% 
-  # Select just vars that are consistent across member-congress
-  select(member_id, congress, state, gender, leadership_role, bills_cosponsored
-         , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
-         , next_election, switched_party, contains("_member")) %>% 
-  distinct(member_id, congress, .keep_all = TRUE)
+###### TEMP #############
+# Examine legislative covariates
+# TO DO: Code to be cleaned up and moved to the beginning of the script most likely
+#######################
+
+# Examine legislative_covariates
+
+# GO QUICK - DO it DIRTY
+# Merge all the data
+# Hand write a list 
+  # - what definitely doesn't apply (e.g. Republican, Dem)
+  # - what is probably repeats
+  # - what is probably perfectly collinear
+# Then from the rest, select the most interesting ones for a regression
+
+# Then, google multilevel models - how do related to FE and how do they help with having a huge N or multiple people
+  
+  
+
+# Filter covariates to just 113-116 congress
+leg_covs <-
+  leg_covariates.raw %>% 
+  filter(congress %in% c(113:116)) %>% 
+  as_tibble()
+
+# Create "white" variable
+leg_covs <-
+  leg_covs %>% 
+  mutate(white = ifelse(race_ethnicity == "White", 1, 0))
+
+# Merge covariates with eigens
+eigens_legCovs <-
+  left_join(
+    frame.eigens_all
+    , leg_covs,
+    by = c("member_id" = "bioguide_id"
+           , "congress" = "congress")
+  )
+
+# Transform eigen value to make more readable (multiple by 100)
+eigens_legCovs <-
+  eigens_legCovs %>% 
+  mutate(eigen_value_100 = eigen_value * 100)
 
 
-eigens_legData <- 
-  left_join(x = frame.eigens_all
-            , y = meta_data
-            , by = c("member_id", "congress"))
+# Regression table
+mod2 <- lm(
+  eigen_value_100 ~
+    proximity_to_floor_centroid_zero_code_missingness
+  + scale_leslag_zero_code_missingness
+  + scale_benchratiolag
+  + scale_votepct
+  + party_leadership
+  + committee_leadership
+  + unopposed
+  + majority_party
+  + nominate_dim1
+  + nominate_dim2
+  + scale_seniority
+  + woman
+  + white
+  , data = eigens_legCovs
+)
+
+summary(mod2)
+
+
+
+# # Get one distict bio info for each member-congress
+# meta_data <-
+#   out.R$meta %>% 
+#   # Select just vars that are consistent across member-congress
+#   select(member_id, congress, state, gender, leadership_role, bills_cosponsored
+#          , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
+#          , next_election, switched_party, contains("_member")) %>% 
+#   distinct(member_id, congress, .keep_all = TRUE)
+# 
+# 
+# eigens_legData <- 
+#   left_join(x = frame.eigens_all
+#             , y = meta_data
+#             , by = c("member_id", "congress"))
 
 
 
