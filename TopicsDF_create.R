@@ -425,86 +425,25 @@ covariates.df <-
 
 
 ####
-# Merge eigencentrality.df with leg_data
+# Merge eigencentrality.df with covariates.df
 ####
 
-# # Filter covariates to just 113-116 congress
-# leg_covs <-
-#   leg_covariates.raw %>% 
-#   filter(congress %in% c(113:116)) %>% 
-#   as_tibble()
-# 
-# # Create "white" variable
-# leg_covs <-
-#   leg_covs %>% 
-#   mutate(white = ifelse(race_ethnicity == "White", 1, 0))
-# 
-# # Scale unscaled variables
-# leg_covs <-
-#   leg_covs %>% 
-#   mutate(scale_speeches_daily = scale(n_speeches_daily))
 
 # Merge covariates with eigens df
 eigensTopics_legCovs <-
   left_join(
     eigens_all
-    , leg_covs,
-    by = c("member_id" = "bioguide_id"
-           , "congress" = "congress")
+    , covariates.df,
+    by = c("member_id", "congress")
   )
 
-# # Pull in ProPublica data (should be moved probably)
-# propubdat <- out.R$meta
-# 
-# # Pull out relevant vars
-# propubdat.relevant <-
-#   propubdat %>% 
-#   select(member_id
-#          , congress
-#          , bills_sponsored
-#          , bills_cosponsored
-#          , contains("_member"))
-# 
-# # Mutate relevant vars
-# propubdat.relevant <-
-#   propubdat.relevant %>% 
-#   mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
-#          , scale_bills_cosponsored = scale(bills_cosponsored) # scale
-#          , caucus_member = 
-#            # dummy for member of any caucus
-#            ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
-#          ) %>% 
-#   select(member_id
-#          , congress
-#          , bills_sponsored
-#          , bills_cosponsored
-#          , scale_bills_sponsored
-#          , scale_bills_cosponsored
-#          , caucus_member)
 
-# Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
-# Just select the correct ones so there is one member-congress only
-propubdat.relevantFixed <-
-  propubdat.relevant %>% 
-  group_by(member_id, congress) %>% 
-  arrange(desc(bills_cosponsored), desc(bills_sponsored), desc(caucus_member)) %>% 
-  distinct(member_id, congress, .keep_all = TRUE)
-
-
-# Merge ProPub dat onto eigensTopics_legCovs
-eigensTopics_legCovs <-
-  left_join(
-    eigensTopics_legCovs
-    , propubdat.relevantFixed
-    , by = c("member_id" = "member_id"
-             , "congress" = "congress")
-  )
-  
 
 # Transform eigen value to make more readable (multiple by 100)
 eigensTopics_legCovs <-
   eigensTopics_legCovs %>% 
   mutate(eigen_value_100 = eigen_value * 100)
+
 
 ####
 # Models
@@ -565,16 +504,44 @@ modT.addBehavioral <- lm(
   + scale_benchratiolag
   + scale_bills_sponsored
   + scale_bills_cosponsored
+  + scale_votes_with_party_pct
   
   , data = eigensTopics_legCovs
 )
 
 summary(modT.addBehavioral)
 
+# Outlier removal
+    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
+    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
+      # When the average is 207, and the next highest is 614
+modT.addBehavioral.outlierRemoved <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  , data = filter(eigensTopics_legCovs, member_id != "F000466")
+)
+
 
 summary(modT.mainCovs)
 summary(modT.addIdentity)
 summary(modT.addBehavioral)
+summary(modT.addBehavioral.outlierRemoved)
+
 
 
 ########################################################################
@@ -1186,11 +1153,11 @@ data %>%
 
 
 # Start Function
-first.obs.TopicFrame.fun <- function(topics.df, mostCommonFrames.df, congressNum){
+first.obs.TopicFrame.fun <- function(topicsFrames.df, mostCommonFrames.df, congressNum){
   
   # Filter to one congress session
   topics.congress <- 
-    topics.df %>% 
+    topicsFrames.df %>% 
     filter(congress == congressNum)
   
   # Create topic_frame variable for all press releases
@@ -1230,22 +1197,22 @@ first.obs.TopicFrame.fun <- function(topics.df, mostCommonFrames.df, congressNum
 
 
 firstFrame.obs_113 <- first.obs.TopicFrame.fun(
-  topics.df = topics_df.R
+  topicsFrames.df = topicsFrames.R
   , mostCommonFrames.df = mostCommonFrames.R
   , congressNum = 113)
 
 firstFrame.obs_114 <- first.obs.TopicFrame.fun(
-  topics.df = topics_df.R
+  topicsFrames.df = topicsFrames.R
   , mostCommonFrames.df = mostCommonFrames.R
   , congressNum = 114)
 
 firstFrame.obs_115 <- first.obs.TopicFrame.fun(
-  topics.df = topics_df.R
+  topicsFrames.df = topicsFrames.R
   , mostCommonFrames.df = mostCommonFrames.R
   , congressNum = 115)
 
 firstFrame.obs_116 <- first.obs.TopicFrame.fun(
-  topics.df = topics_df.R
+  topicsFrames.df = topicsFrames.R
   , mostCommonFrames.df = mostCommonFrames.R
   , congressNum = 116)
 
@@ -1385,80 +1352,168 @@ frame.eigens_all <- bind_rows(frame.eigens_113
 
 # Then, google multilevel models - how do related to FE and how do they help with having a huge N or multiple people
   
-  
 
-# Filter covariates to just 113-116 congress
-leg_covs <-
-  leg_covariates.raw %>% 
-  filter(congress %in% c(113:116)) %>% 
-  as_tibble()
 
-# Create "white" variable
-leg_covs <-
-  leg_covs %>% 
-  mutate(white = ifelse(race_ethnicity == "White", 1, 0))
+#############
+# Merge with legislative covariates
 
-# Merge covariates with eigens
-eigens_legCovs <-
+eigensFrames_legcovs <-
   left_join(
     frame.eigens_all
-    , leg_covs,
-    by = c("member_id" = "bioguide_id"
-           , "congress" = "congress")
+    , covariates.df,
+    by = c("member_id", "congress")
+  )
+  
+
+
+
+
+topic1 <- topicsFrames.R %>% 
+  filter(topic == "1")
+
+topic1 %>% 
+  summarize()
+
+###########################################################
+# Analysis - Frames
+##########################################################
+
+###
+# Frame Frequency Tables
+###
+
+ff_top1 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "1")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top2 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "2")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top3 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "3")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top4 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "4")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top5 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "5")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top6 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "6")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top7 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "7")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top8 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "8")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top9 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "9")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top10 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "10")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top11 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "11")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top12 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "12")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top13 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "13")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top14 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "14")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top15 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "15")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top16 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "16")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top17 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "17")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top18 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "18")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top19 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "19")$frame))) %>% 
+  arrange(desc(Freq))
+ff_top20 <- as.data.frame(prop.table(table(filter(
+  topicsFrames.R, topic == "20")$frame))) %>% 
+  arrange(desc(Freq))
+
+
+frameFreqList <-
+  list(
+    ff_top1 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "1")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top2 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "2")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top3 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "3")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top4 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "4")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top5 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "5")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top6 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "6")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top7 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "7")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top8 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "8")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top9 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "9")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top10 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "10")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top11 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "11")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top12 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "12")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top13 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "13")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top14 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "14")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top15 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "15")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top16 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "16")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top17 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "17")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top18 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "18")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top19 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "19")$frame))) %>% 
+      arrange(desc(Freq)),
+    ff_top20 = as.data.frame(prop.table(table(filter(
+      topicsFrames.R, topic == "20")$frame))) %>% 
+      arrange(desc(Freq))
   )
 
-# Transform eigen value to make more readable (multiple by 100)
-eigens_legCovs <-
-  eigens_legCovs %>% 
-  mutate(eigen_value_100 = eigen_value * 100)
+# What are the max frame frequencies in each topic?
+maxFrameFreqs <- plyr::ldply(.data = frameFreqList, .fun = slice_max, Freq) %>% arrange(desc(Freq))
 
 
-# Regression table
-mod2 <- lm(
-  eigen_value_100 ~
-    proximity_to_floor_centroid_zero_code_missingness
-  + scale_leslag_zero_code_missingness
-  + scale_benchratiolag
-  + scale_votepct
-  + party_leadership
-  + committee_leadership
-  + unopposed
-  + majority_party
-  + nominate_dim1
-  + nominate_dim2
-  + scale_seniority
-  + woman
-  + white
-  , data = eigens_legCovs
-)
-
-summary(mod2)
-
-
-
-# # Get one distict bio info for each member-congress
-# meta_data <-
-#   out.R$meta %>% 
-#   # Select just vars that are consistent across member-congress
-#   select(member_id, congress, state, gender, leadership_role, bills_cosponsored
-#          , bills_sponsored, dw_nominate, cook_pvi, votes_with_party_pct
-#          , next_election, switched_party, contains("_member")) %>% 
-#   distinct(member_id, congress, .keep_all = TRUE)
-# 
-# 
-# eigens_legData <- 
-#   left_join(x = frame.eigens_all
-#             , y = meta_data
-#             , by = c("member_id", "congress"))
-
-
-
-
-
-
-
-
-
+# Average max?
+summary(maxFrameFreqs$Freq)
 
 
 
