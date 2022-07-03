@@ -1,0 +1,1538 @@
+---
+title: "Party Communication Centrality"
+subtitle: "Initial Results"
+author: Mackenzie Weiler
+date: '2022-06-29'
+header_includes:
+  -\usepackage{bbm}
+  -\usepackage{pmboxdraw}
+  -\usepackage{float}
+  
+output:
+  rmarkdown::pdf_document:  
+    fig_caption: yes
+    latex_engine: xelatex
+    extra_dependencies: ["float"]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(fig.pos = "!H", out.extra = "")
+
+```
+
+
+# Ideas for next directions
+
+There are two directions for next steps that seem the most likely to try. The first is re-specifying the data, particularly in terms of increasing the number of observations. The second is re-thinking the model specifications, but I think the data might be the more fruitful direction.
+
+## Data
+The number of observations is fairly small. The dependent variable is centrality at the member-congress level; therefore, each member has the opportunity to appear up to 4 times (4 congresses, 4 congressional networks). The dependent variable is constructed as follows:
+
+1. Members' press releases are split into 2 groups by party.
+2. After pre-processing, structural topic models are estimated for each party, resulting in 20 topics of communication for each party.
+3. Press releases are labeled with their most likely topic (and most likely frame).
+4. Topic (frame) cascades are prepared for each congress in the form of topic-member-"date of first topic use".
+5. For each congress, a diffusion network is estimated based on the 20 topic (frame) cascades.
+6. Each member's centrality in the congressional network is estimated.
+7. The DV is therefore currently member-congress centrality score.
+
+### Ideas of next directions with data
+
+1. Put Democrats and Republicans together. I will do this, I just haven't done it yet. I will also specify a mixed effects model with party as a random/grouping effect.
+2. Estimate networks at a smaller time scale (e.g. session). In that case, there would be up to 8 observations per member. 
+3. Frames - frames are constructed as the second most common topic within each topic, so, like topic networks, frame networks are also constructed with 20 cascades. Within each topic, the "primary frame" is, on average, about 24% of the topic. I could add additional cascades by including secondary and tertiary frames so that there are more cascades with which to estimate the network. This could be potentially advantageous because it is throwing away less information; however, the less frequent frames risk becoming more non-nonsensical.
+
+## Models
+
+The exploratory data analysis did not reveal many strong correlations between the predictors and the centrality variable. This is largely reflected in the linear models. One direction could be to play around with model specifications (in particular different forms of mixed effects models) and try to coax it into something that looks good, but there's obviously not a whole lot of integrity in direction. I am open to suggestions for model specifications here; however, from my perspective it seems like a focus on the data is a better way to go because the DV is the primary contribution of this chapter.  
+
+
+# Preliminary results
+
+Below are four tables - two where the dependent variable is centrality based on topic and two where the dependent variable is centrality based on frame. For each DV, there are two sets of models - one set which is just linear regression and one set with mixed effects models with congress as a random effect. I'm not sure how accurate the random effects estimates are however, because I only have 4 congresses (rather than the rule of thumb of at least 5 grouping levels). I did try a specification with member as a random effect, however, I had a singularity problem (most likely because there are only <= 4 observations per member). 
+
+
+## Centrality based on Topic
+```{r code}
+
+rm(list = ls())
+
+# Packages
+packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
+              "stringr", "stm", "quanteda",
+              "texreg", "knitr", "kableExtra")
+
+# Load packages
+lapply(packages, require, character.only = TRUE)
+
+# Set working dir
+setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Party_messaging")
+
+
+#################
+# Load data and models
+#################
+
+###
+# Legislative covariates
+##############################
+
+leg_covariates.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/from_williams/legislative_covariates.rds"))
+
+
+###
+# Press releases - Republican House
+##############################
+
+# Read in 20 topic models that were run on May 2 after removing state names
+
+# STM-format processed data (trimmed/stemmed)
+out.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_stmPrepped_houseR.rds"))
+
+# Fitted topics - 20 topics
+fit.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_Fit_20topics_houseR.rds"))
+
+###
+# Press releases - Democratic House
+#############################
+
+# # STM-format processed data (trimmed/stemmed)
+# out <- readRDS(paste0(getwd(), "/Data/output/2022-04-18_stmPreppedCorpus_houseD.rds"))
+# 
+# # Fitted topics - 20 topics
+# fit <- readRDS(paste0(getwd(), "/Data/output/2022-04-18_Fit_20topics_houseD.rds"))
+
+
+###################################################
+# Label each document with its most-probable topic
+###################################################
+
+# Function to label each document with most-propable topic
+
+label_statement_topics.fns <- function(fit, out){
+
+# Make a data.table of topic proportions
+topics_DT <- make.dt(fit, meta = out$meta)
+
+
+# Pivot DT longer
+# So that each doc is repeated 20 times (20 topics)
+# Format:
+  # indx; topic; prob
+  # 101; 1    ; 0.359
+  # 101; 2    ; 0.0003
+  # 101; 3    ; 0.0156
+  # ....
+topics_long <- 
+  pivot_longer(
+  data = topics_DT,
+  cols = starts_with("Topic"),
+  names_to = "topic",
+  names_prefix = "Topic",
+  values_to = "topic_prob"
+) %>% 
+  as.data.frame()
+
+# Arrange by doc index, then desc(prob)
+# So the highest probability observation is first
+topics_long <- 
+  topics_long %>% 
+  group_by(indx) %>% 
+  arrange(desc(topic_prob), .by_group = TRUE) %>% 
+  ungroup()
+
+# Keep only the observation with the highest prob
+topics.df <-
+  topics_long %>% 
+  distinct(indx, .keep_all = TRUE)
+
+
+###############
+# To do later:
+# Decide what to do about near-ties in topic probabilities
+# For example, about both education and STEM
+# If education is a very popular topic at the time, then we
+# probably want to say it's about education.
+# But if STEM is very popular, we probably want to say STEM
+# Maybe want to fit an STM taking congress # into account
+# Or year
+###############
+
+
+###########################
+# Fix caucus info - something didn't merge properly
+# Should probably go back and fix this is the first script
+##########################
+
+# Remove the incorrect caucus info
+topics.df <-
+  topics.df %>% 
+  select(-c(contains("_leader"), contains("_titles"),
+            contains("_taskforces"), contains("_member")))
+
+
+
+#####################################################################
+# Add topic labels onto data.frame
+# To provide information about topics
+
+# Get STM-generated topic labels
+fit.labels <- labelTopics(fit, 1:20, n = 7)
+fit.labels_short <- labelTopics(fit, 1:20, n = 4) 
+
+# Pull out 7-word summary, 3-word summary,  and topic #
+labels.df <- data.frame(topic = fit.labels$topicnums,
+                        topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
+                        topic_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
+labels.df$topic <- as.character(labels.df$topic)
+
+# Merge onto data
+topics.df <- 
+  topics.df %>% 
+  dtplyr::lazy_dt() %>% 
+  left_join(labels.df, by = "topic") %>% 
+  as.data.frame()
+
+# Remove 2021 press releases (there are only 8, compared to 20k for the others)
+topics.df <-
+  topics.df %>% 
+  filter(date_pr < ymd("2021-01-01"))
+
+} # End label_statement_topics.fns function
+
+
+###############
+# Apply topic label function
+##############
+topics_df.R <-
+  label_statement_topics.fns(
+    fit = fit.R,
+    out = out.R)
+
+
+
+############################################################
+# Get the first use of each topic by each member
+
+# Start Function
+first.obs.fun <- function(topics.df, congressNum){
+
+# Filter to one congress session
+topics.congress <- 
+  topics.df %>% 
+  filter(congress == congressNum)
+
+# Select the first use of each topic by member
+# Group by topic, then by member
+# Keep first use
+first.obs <- 
+  topics.congress %>% 
+  group_by(topic, member_id) %>% 
+  arrange(date_pr, .by_group = TRUE) %>% 
+  distinct(member_id, topic, .keep_all = TRUE) %>% 
+  ungroup()
+
+} # end first.obs.fun
+
+###############
+# Apply Function: First topic observations by member
+##############
+
+
+firstObs_113 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 113)
+
+firstObs_114 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 114)
+
+firstObs_115 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 115)
+
+firstObs_116 <- first.obs.fun(topics.df = topics_df.R
+                              , congressNum = 116)
+
+# Pull all firstObs together
+firstObs_all <- bind_rows(firstObs_113, firstObs_114, firstObs_115, firstObs_116)
+
+
+
+
+
+
+##############################
+# NetInf Function
+
+  # Create Cascades
+  # Infer edges/ estimate network
+  # Calculate eigencentrality for each member
+##############################
+
+estimateNetwork_outputEigens.fns <- function(first.obs, congressNum){
+  
+
+#######
+# Transform into a cascades object
+#######
+  
+congress_Cascade <- as_cascade_long(
+  data = first.obs
+  , cascade_node_name = 'member_id'
+  , event_time = 'date_pr'
+  , cascade_id = 'topic'
+)
+  
+  # # Investigate cascades - just playing around
+  # summary(congress_Cascade)
+  # 
+  # # Convert event times to dates
+  # cascades_dates <-
+  #   congress_Cascade %>% 
+  #   modify_depth(2) %>% 
+  #   mutate(event_time = as.Date(event_time, origin = "1970-01-01"))
+  # 
+  # 
+  # # Visualize cascades
+  # cascade_ids <- unique(first.obs$topic)
+  # selection <- cascade_ids[c(1)]
+  # plot(congress_Cascade, label_nodes = TRUE, selection = selection)
+  # 
+  # p <- plot(congress_Cascade
+  #      , label_nodes = TRUE
+  #      , selection = 1)
+  # 
+  # p + 
+  #   scale_x_date()
+
+#######
+# Infer edges based on a diffusion model
+#######
+
+# Select # edges by, after each iteration of algorithm, check if the edge
+  # added sig. improvement to the network
+# Select parameters automatically
+
+auto.netinf.result <- netinf(
+  cascades = congress_Cascade
+  , trans_mod = "exponential"
+  , p_value_cutoff = 0.1
+  # , params = 0.5 # lambda/rate
+  )
+
+
+#######
+# Calculate eigenvector centrality
+#######
+
+# Convert graph to igraph format (directed ties)
+netinf.graph <- 
+  auto.netinf.result %>% 
+  select(origin_node, destination_node) %>% 
+  graph_from_data_frame()
+
+# Calculate eigenvector centrality
+eigens_result <- eigen_centrality(
+  graph = netinf.graph
+  , directed = TRUE
+  , scale = TRUE
+  , weights = NULL
+)
+
+#######
+# Create eigens DF
+# Pull out eigen values, member_id, congress, and index
+#######
+
+eigens_df <- data.frame(
+  member_id = names(eigens_result$vector),
+  eigen_value = unname(eigens_result$vector),
+  congress = congressNum
+)
+
+
+} # End estimateNetwork_outputEigens.fns
+
+##########################################################
+
+
+
+
+#######
+# Apply Function: Estimate network/eigencentrality
+#######
+
+set.seed(4445)
+
+eigens_113 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_113
+                                               , congressNum = 113)
+
+eigens_114 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_114
+                                               , congressNum = 114)
+
+eigens_115 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_115
+                                               , congressNum = 115)
+
+eigens_116 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_116
+                                               , congressNum = 116)
+
+# Merge data together
+eigens_all <- bind_rows(eigens_113, eigens_114, eigens_115, eigens_116)
+
+
+
+###############################################################
+# COVARIATES - Create
+
+###
+# William Minozzi covariates
+###
+
+# Filter covariates to just 113-116 congress (both Repubs and Dems)
+leg_covs <-
+  leg_covariates.raw %>% 
+  filter(congress %in% c(113:116)) %>% 
+  filter(chamber == "H") %>% 
+  as_tibble()
+
+# Create "white" variable
+leg_covs <-
+  leg_covs %>% 
+  mutate(white = ifelse(race_ethnicity == "White", 1, 0))
+
+# Scale unscaled variables
+leg_covs <-
+  leg_covs %>% 
+  mutate(scale_speeches_daily = scale(n_speeches_daily))
+
+###
+# ProPublica covariates
+###
+
+# Pull in ProPublica data from STM
+propubdat <- out.R$meta
+
+# Pull out relevant vars
+propubdat.relevant <-
+  propubdat %>% 
+  select(member_id
+         , congress
+         , bills_sponsored
+         , bills_cosponsored
+         , contains("_member")
+         , votes_with_party_pct)
+
+# Mutate relevant vars
+propubdat.relevant <-
+  propubdat.relevant %>% 
+  mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
+         , scale_bills_cosponsored = scale(bills_cosponsored) # scale
+         , scale_votes_with_party_pct = scale(votes_with_party_pct)
+         , caucus_member = 
+           # dummy for member of any caucus
+           ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
+  ) %>% 
+  select(member_id
+         , congress
+         , bills_sponsored
+         , bills_cosponsored
+         , votes_with_party_pct
+         , scale_bills_sponsored
+         , scale_bills_cosponsored
+         , scale_votes_with_party_pct
+         , caucus_member)
+
+# Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
+# Just select the correct ones so there is one member-congress only
+propubdat.relevantFixed <-
+  propubdat.relevant %>% 
+  group_by(member_id, congress) %>% 
+  arrange(desc(bills_cosponsored)
+          , desc(bills_sponsored)
+          , desc(caucus_member)
+          , desc(votes_with_party_pct)) %>% 
+  distinct(member_id, congress, .keep_all = TRUE)
+
+###
+# Merge covariate DFs
+###
+
+# Join ProPub (just Repubs) with leg_covs (Repubs and Dems)
+covariates.df <-
+  left_join(
+    propubdat.relevantFixed
+    , leg_covs
+    , by = c("member_id" = "bioguide_id"
+             , "congress" = "congress")
+  )
+
+```
+
+```{r topicregs_make}
+
+
+##########################################################
+# Regressions: 
+###########################################################
+
+
+####
+# Merge eigencentrality.df with covariates.df
+####
+
+
+# Merge covariates with eigens df
+eigensTopics_legCovs <-
+  left_join(
+    eigens_all
+    , covariates.df,
+    by = c("member_id", "congress")
+  )
+
+
+
+# Transform eigen value to make more readable (multiple by 100)
+eigensTopics_legCovs <-
+  eigensTopics_legCovs %>% 
+  mutate(eigen_value_100 = eigen_value * 100)
+
+
+####
+# Models
+####
+
+# Main variables (nominate, leadership, gender, race)
+modT.mainCovs <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(woman)
+  + as.factor(white)
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.mainCovs)
+
+# Main vars + more identity variables
+modT.addIdentity <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(poc_woman)
+  + as.factor(poc_man)
+  + as.factor(majority_party)
+  + as.factor(unopposed)
+  + proximity_to_floor_centroid
+  + as.factor(caucus_member)
+
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.addIdentity)
+
+# Main vars + more behavioral vars
+modT.addBehavioral <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(modT.addBehavioral)
+
+# Outlier removal
+    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
+    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
+      # When the average is 207, and the next highest is 614
+modT.addBehavioral.outlierRemoved <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  , data = filter(eigensTopics_legCovs, member_id != "F000466")
+)
+
+
+summary(modT.mainCovs)
+summary(modT.addIdentity)
+summary(modT.addBehavioral)
+summary(modT.addBehavioral.outlierRemoved)
+
+
+
+```
+
+Table \ref{tab:topic_lm} shows the results of linear models regressed on centrality based on topic.
+
+```{r topic_reg_table, include = TRUE, results = 'asis'}
+
+texreg(l = list(modT.mainCovs, modT.addIdentity, modT.addBehavioral, modT.addBehavioral.outlierRemoved),
+       custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
+       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
+                              , "as.factor(committee_leadership)1" = "Committee leadership"
+                              , "scale_seniority" = "Seniority"
+                              , "scale_leslag" = "Lagged LES"
+                              , "nominate_dim1" = "Nominate dim 1"
+                              , "as.factor(woman)1" = "Woman"
+                              , "as.factor(white)1" = "White"
+                              , "as.factor(poc_woman)1" = "POC woman"
+                              , "as.factor(poc_man)1" = "POC man"
+                              , "as.factor(majority_party)1 " = "Majority party"
+                              , "as.factor(unopposed)1" = "Unopposed"
+                              , "proximity_to_floor_centroid" = "Proximity to floor"
+                              , "as.factor(caucus_member)1" = "Caucus member"
+                              , "nominate_dim2" = "Nominate dim 2"
+                              , "scale_votepct" = "Vote Pct."
+                              , "scale_speeches_daily" = "Daily speech number"
+                              , "scale_benchratiolag " = "Lagged benchmark ratio"
+                              , "scale_bills_sponsored" = "Num. bills sponsored"
+                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
+                              , "scale_votes_with_party_pct" = "Votes with party pct."
+                              ), 
+       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
+       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
+       He cosponsored 1267 bills in the 116th congress, while the next highest
+       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
+       caption = "Linear models regressed on centrality based on topic",
+       caption.above = TRUE, label = "tab:topic_lm"
+       )
+       
+
+```
+
+
+
+
+```{r LME}
+# Do the same models but with random effects for congress and member
+
+library(lme4)
+set.seed(123)
+
+# Main variables (nominate, leadership, gender, race)
+lmeT.mainCovs <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(woman)
+  + as.factor(white)
+  
+  + (1|congress)
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(lmeT.mainCovs)
+
+# Main vars + more identity variables
+lmeT.addIdentity <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(poc_woman)
+  + as.factor(poc_man)
+  + as.factor(majority_party)
+  + as.factor(unopposed)
+  + proximity_to_floor_centroid
+  + as.factor(caucus_member)
+  
+  + (1|congress)
+
+  , data = eigensTopics_legCovs
+)
+
+summary(lmeT.addIdentity)
+
+# Main vars + more behavioral vars
+lmeT.addBehavioral <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  + (1|congress)
+  
+  , data = eigensTopics_legCovs
+)
+
+summary(lmeT.addBehavioral)
+
+# Outlier removal
+    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
+    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
+      # When the average is 207, and the next highest is 614
+lmeT.addBehavioral.outlierRemoved <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  + (1|congress)
+  
+  , data = filter(eigensTopics_legCovs, member_id != "F000466")
+)
+
+
+```
+
+Table \ref{tab:topic_lme} shows the results of mixed effects linear models regressed on centrality based on topic.
+
+```{r topic_lmer_table, include = TRUE, results = 'asis'}
+
+texreg(l = list(lmeT.mainCovs, lmeT.addIdentity, lmeT.addBehavioral, lmeT.addBehavioral.outlierRemoved),
+       custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
+       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
+                              , "as.factor(committee_leadership)1" = "Committee leadership"
+                              , "scale_seniority" = "Seniority"
+                              , "scale_leslag" = "Lagged LES"
+                              , "nominate_dim1" = "Nominate dim 1"
+                              , "as.factor(woman)1" = "Woman"
+                              , "as.factor(white)1" = "White"
+                              , "as.factor(poc_woman)1" = "POC woman"
+                              , "as.factor(poc_man)1" = "POC man"
+                              , "as.factor(majority_party)1 " = "Majority party"
+                              , "as.factor(unopposed)1" = "Unopposed"
+                              , "proximity_to_floor_centroid" = "Proximity to floor"
+                              , "as.factor(caucus_member)1" = "Caucus member"
+                              , "nominate_dim2" = "Nominate dim 2"
+                              , "scale_votepct" = "Vote Pct."
+                              , "scale_speeches_daily" = "Daily speech number"
+                              , "scale_benchratiolag " = "Lagged benchmark ratio"
+                              , "scale_bills_sponsored" = "Num. bills sponsored"
+                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
+                              , "scale_votes_with_party_pct" = "Votes with party pct."
+                              ),
+       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
+       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
+       He cosponsored 1267 bills in the 116th congress, while the next highest
+       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
+       caption = "Mixed effects linear models regressed on centrality based on topic",
+       caption.above = TRUE, label = "tab:topic_lme"
+       )
+
+       
+
+```
+
+
+## Centrality based on Frame
+
+```{r frame_data}
+#################################################################
+#################################################################
+# SECTION 2: FRAMES
+#################################################################
+#################################################################
+
+# Description:
+
+# Within each topic, what is the second highest topic? 
+# Who is most central in a diffusion network of that frame?
+
+
+
+
+###################################################
+
+# Function: - Label each doc with topic and frame
+  # Repeat section 1 (label docs with most-prob topic)
+  # Add frame label (most-prob second topic per doc)
+  # Add topic/frame descriptions
+
+###################################################
+
+
+
+label_statement_topics.fns <- function(fit, out){
+
+  ########
+  # Add TOPIC label to each doc
+  ########
+  
+  # Make a data.table of topic proportions
+  topics_DT <- make.dt(fit, meta = out$meta)
+  
+  # Pivot longer so each doc is repeated 20 times
+  topics_long <- 
+    pivot_longer(
+      data = topics_DT,
+      cols = starts_with("Topic"),
+      names_to = "topic",
+      names_prefix = "Topic",
+      values_to = "topic_prob"
+    ) %>% 
+    as.data.frame()
+  
+  # Arrange by doc index, then desc(prob)
+  # So the highest probability observation is first
+  topics_long <- 
+    topics_long %>% 
+    group_by(indx) %>% 
+    arrange(desc(topic_prob), .by_group = TRUE) %>% 
+    ungroup()
+  
+  
+  # Create mainTopic.df
+  # (keep only the observation with the highest prob)
+  mainTopic.df <- 
+    topics_long %>% 
+    distinct(indx, .keep_all = TRUE)
+  
+  ########
+  # Add FRAME label to each doc
+  ########
+
+  # Get the remaining frames
+  remaining_frames <-
+    setdiff(topics_long, mainTopic.df) %>% 
+    group_by(indx) %>% 
+    arrange(desc(topic_prob), .by_group = TRUE) %>% 
+    ungroup()
+  
+  # Keep only the highest prob frame
+  mainFrame <-
+    remaining_frames %>% 
+    distinct(indx, .keep_all = TRUE)
+  
+  # Rename "frame" and "frame_prob" and only keep them and indx in simple df
+  mainFrame_simple <-
+    mainFrame %>% 
+    rename(frame = topic,
+           frame_prob = topic_prob) %>% 
+    select(indx, frame, frame_prob)
+  
+  
+  ########
+  # Merge TOPIC and FRAME dfs
+  ########
+  
+  # Merge frames onto main topic df
+  topicsFrames.df <- 
+    left_join(
+      mainTopic.df
+      , mainFrame_simple
+      , by = c("indx")
+    )
+
+  
+  ########
+  # Remove the incorrect caucus info
+  ########
+  
+  topicsFrames.df <-
+    topicsFrames.df %>% 
+    select(-c(contains("_leader"), contains("_titles"),
+              contains("_taskforces"), contains("_member")))
+  
+  
+  
+  ########
+  # Add topic labels onto data.frame
+  # To provide information about topics/frames
+  ########
+  
+
+  # Pull 7 and 4 word summaries (estimated by STM)
+  set.seed(5555)
+  # 7-word summary
+  fit.labels <- labelTopics(fit, 1:20, n = 7)
+  # 4-word summary
+  fit.labels_short <- labelTopics(fit, 1:20, n = 4) 
+  
+  
+  # Labels for TOPICS
+  # Topic # and short/long descriptions
+  topic_labels.df <- data.frame(topic = as.character(fit.labels$topicnums),
+                          topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
+                          topic_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
+  
+  # Labels for FRAMES
+  frame_labels.df <- data.frame(frame = as.character(fit.labels$topicnums),
+                                frame_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
+                                frame_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
+  
+  
+  ########
+  # Merge topic labels onto data
+  ########
+  topicsFrames.df <- 
+    topicsFrames.df %>% 
+    dtplyr::lazy_dt() %>% 
+    left_join(topic_labels.df, by = "topic") %>% 
+    as.data.frame()
+  
+  ########
+  # Merge frame labels onto data
+  ########
+  topicsFrames.df <- 
+    topicsFrames.df %>% 
+    dtplyr::lazy_dt() %>% 
+    left_join(frame_labels.df, by = "frame") %>% 
+    as.data.frame()
+  
+  
+} ##################################  End label_statement_topics.fns function
+
+
+
+
+
+###############
+# Apply topic label function
+##############
+set.seed(7777)
+topicsFrames.R <-
+  label_statement_topics.fns(
+    fit = fit.R,
+    out = out.R)
+
+# Remove 2021 press releases (there are only 8, compared to 20k for the others)
+topicsFrames.R <-
+  topicsFrames.R %>% 
+  filter(date_pr < ymd("2021-01-01"))
+
+
+# Table: Examples of Statement title, Topic, Frame
+# Pull random examples:
+sample_n(topicsFrames.R, 1) %>% select(title_pr, topic_label, frame_label)
+
+
+
+
+
+
+
+##########################################################
+# Most Common Frames
+# Make DF for diffusion network
+##########################################################
+
+
+# For each topic, what is the most common frame?
+mostCommonFrames.R <-
+  topicsFrames.R %>% 
+  group_by(topic) %>% 
+  count(frame) %>% 
+  summarize(frame = as.character(which.max(n))) 
+
+
+####
+# Pull the unique descriptions of topics/frames
+####
+
+# Topic descriptions
+topicDescs.df <-
+  topicsFrames.R %>% 
+  select(topic, topic_label, topic_label_short) %>% 
+  distinct()
+
+# Frame descriptions
+frameDescs.df <-
+  topicsFrames.R %>% 
+  select(frame, frame_label, frame_label_short) %>% 
+  distinct()
+  
+# Merge TOPIC descriptions onto table
+mostCommonFrames.R <-
+  mostCommonFrames.R %>% 
+  left_join(., topicDescs.df
+            , by = "topic"
+            )
+
+# Merge FRAME descriptions onto table
+mostCommonFrames.R <-
+  mostCommonFrames.R %>% 
+  left_join(., frameDescs.df,
+            by = "frame")
+
+
+
+############################################################
+# Function: First Observation of TOPIC-FRAME usage by memeber
+############################################################
+
+
+# Start Function
+first.obs.TopicFrame.fun <- function(topicsFrames.df, mostCommonFrames.df, congressNum){
+  
+  # Filter to one congress session
+  topics.congress <- 
+    topicsFrames.df %>% 
+    filter(congress == congressNum)
+  
+  # Create topic_frame variable for all press releases
+  topic.frame.df <-
+    topics.congress %>% 
+    mutate(topic_frame = paste(topic, frame, sep = "_"))
+  
+  # Create topic_frame variable within mostCommonFrames.df
+  mostCommonFrames.df <-
+    mostCommonFrames.df %>% 
+    mutate(topic_frame = paste(topic, frame, sep = "_"))
+  
+  # Filter press releases to only those using the most common frame for each topic
+  topic.frame.filtered <-
+    topic.frame.df %>% 
+    filter(topic_frame %in% unique(mostCommonFrames.df$topic_frame))
+  
+  
+  # Select first use of each topic_frame by member
+  first.obs.topic_frame <- 
+    topic.frame.filtered %>% 
+    group_by(topic_frame, member_id) %>% 
+    select(topic_frame, member_id, date_pr, everything()) %>% 
+    arrange(date_pr, .by_group = TRUE) %>% 
+    distinct(member_id, topic_frame, .keep_all = TRUE) %>% 
+    ungroup()
+  
+
+  
+} ##################################### end first.obs.TopicFrame.fun
+
+
+########################
+# Apply function
+# Create datesets of first TOPIC_FRAME observation by member-congress
+########################
+
+
+firstFrame.obs_113 <- first.obs.TopicFrame.fun(
+  topicsFrames.df = topicsFrames.R
+  , mostCommonFrames.df = mostCommonFrames.R
+  , congressNum = 113)
+
+firstFrame.obs_114 <- first.obs.TopicFrame.fun(
+  topicsFrames.df = topicsFrames.R
+  , mostCommonFrames.df = mostCommonFrames.R
+  , congressNum = 114)
+
+firstFrame.obs_115 <- first.obs.TopicFrame.fun(
+  topicsFrames.df = topicsFrames.R
+  , mostCommonFrames.df = mostCommonFrames.R
+  , congressNum = 115)
+
+firstFrame.obs_116 <- first.obs.TopicFrame.fun(
+  topicsFrames.df = topicsFrames.R
+  , mostCommonFrames.df = mostCommonFrames.R
+  , congressNum = 116)
+
+# Pull all firstObs together
+firstFrame.obs_all <- bind_rows(firstFrame.obs_113
+                                , firstFrame.obs_114
+                                , firstFrame.obs_115
+                                , firstFrame.obs_116)
+
+
+
+##############################
+# NetInf Function - FRAMES
+
+# Create Cascades
+# Infer edges/ estimate network
+# Calculate eigencentrality for each member
+##############################
+
+estimateNetwork_outputEigens_frames.fns <- function(firstFrame.obs, congressNum){
+  
+  #######
+  # Transform into a cascades object
+  #######
+  
+  congress_Cascade <- as_cascade_long(
+    data = firstFrame.obs
+    , cascade_node_name = 'member_id'
+    , event_time = 'date_pr'
+    , cascade_id = 'topic_frame'
+  )
+  
+  
+  #######
+  # Infer edges based on a diffusion model
+  #######
+  
+  # Select # edges by, after each iteration of algorithm, check if the edge
+  # added sig. improvement to the network
+  # Select parameters automatically
+  
+  auto.netinf.result <- netinf(
+    cascades = congress_Cascade
+    , trans_mod = "exponential"
+    , p_value_cutoff = 0.1
+    # , params = 0.5 # lambda/rate
+  )
+  
+  
+  #######
+  # Calculate eigenvector centrality
+  #######
+  
+  # Convert graph to igraph format (directed ties)
+  netinf.graph <- 
+    auto.netinf.result %>% 
+    select(origin_node, destination_node) %>% 
+    graph_from_data_frame()
+  
+  # Calculate eigenvector centrality
+  eigens_result <- eigen_centrality(
+    graph = netinf.graph
+    , directed = TRUE
+    , scale = TRUE
+    , weights = NULL
+  )
+  
+  #######
+  # Create eigens DF
+  # Pull out eigen values, member_id, congress, and index
+  #######
+  
+  eigens_df <- data.frame(
+    member_id = names(eigens_result$vector),
+    eigen_value = unname(eigens_result$vector),
+    congress = congressNum
+  )
+  
+  
+} # End estimateNetwork_outputEigens_frames.fns
+
+##########################################################
+
+
+
+#######
+# Apply function: Estimate network/eigencentrality - frames
+#######
+
+set.seed(4444)
+
+frame.eigens_113 <- estimateNetwork_outputEigens_frames.fns(
+  firstFrame.obs = firstFrame.obs_113
+  , congressNum = 113)
+  
+frame.eigens_114 <- estimateNetwork_outputEigens_frames.fns(
+  firstFrame.obs = firstFrame.obs_114
+  , congressNum = 114)
+
+frame.eigens_115 <- estimateNetwork_outputEigens_frames.fns(
+  firstFrame.obs = firstFrame.obs_115
+  , congressNum = 115)
+
+frame.eigens_116 <- estimateNetwork_outputEigens_frames.fns(
+  firstFrame.obs = firstFrame.obs_116
+  , congressNum = 116)
+
+# Merge data together
+frame.eigens_all <- bind_rows(frame.eigens_113
+                        , frame.eigens_114
+                        , frame.eigens_115
+                        , frame.eigens_116)
+
+
+
+
+# LEFT OFF HERE
+##########################################################
+# Merge eigencentrality.df with leg_data
+###########################################################
+
+
+###### TEMP #############
+# Examine legislative covariates
+# TO DO: Code to be cleaned up and moved to the beginning of the script most likely
+#######################
+
+# Examine legislative_covariates
+
+# GO QUICK - DO it DIRTY
+# Merge all the data
+# Hand write a list 
+  # - what definitely doesn't apply (e.g. Republican, Dem)
+  # - what is probably repeats
+  # - what is probably perfectly collinear
+# Then from the rest, select the most interesting ones for a regression
+
+# Then, google multilevel models - how do related to FE and how do they help with having a huge N or multiple people
+  
+
+
+```
+
+```{r frameregs_make}
+
+
+##########################################################
+# Regressions Frames: 
+###########################################################
+
+
+#############
+# Merge with legislative covariates
+
+eigensFrames_legcovs <-
+  left_join(
+    frame.eigens_all
+    , covariates.df,
+    by = c("member_id", "congress")
+  )
+
+
+# Transform eigen value to make more readable (multiple by 100)
+eigensFrames_legcovs <-
+  eigensFrames_legcovs %>% 
+  mutate(eigen_value_100 = eigen_value * 100)
+
+
+####
+# Models
+####
+
+# Main variables (nominate, leadership, gender, race)
+modF.mainCovs <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(woman)
+  + as.factor(white)
+  
+  , data = eigensFrames_legcovs
+)
+
+
+# Main vars + more identity variables
+modF.addIdentity <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(poc_woman)
+  + as.factor(poc_man)
+  + as.factor(majority_party)
+  + as.factor(unopposed)
+  + proximity_to_floor_centroid
+  + as.factor(caucus_member)
+
+  , data = eigensFrames_legcovs
+)
+
+
+# Main vars + more behavioral vars
+modF.addBehavioral <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  , data = eigensFrames_legcovs
+)
+
+
+# Outlier removal
+    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
+    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
+      # When the average is 207, and the next highest is 614
+modF.addBehavioral.outlierRemoved <- lm(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  , data = filter(eigensFrames_legcovs, member_id != "F000466")
+)
+
+
+summary(modF.mainCovs)
+summary(modF.addIdentity)
+summary(modF.addBehavioral)
+summary(modF.addBehavioral.outlierRemoved)
+
+
+
+```
+
+Table \ref{tab:frame_lm} shows the results of linear models regressed on centrality based on frame.
+
+```{r framereg_table, include = TRUE, results = 'asis'}
+
+texreg(l = list(modF.mainCovs, modF.addIdentity, modF.addBehavioral, modF.addBehavioral.outlierRemoved),
+       custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
+       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
+                              , "as.factor(committee_leadership)1" = "Committee leadership"
+                              , "scale_seniority" = "Seniority"
+                              , "scale_leslag" = "Lagged LES"
+                              , "nominate_dim1" = "Nominate dim 1"
+                              , "as.factor(woman)1" = "Woman"
+                              , "as.factor(white)1" = "White"
+                              , "as.factor(poc_woman)1" = "POC woman"
+                              , "as.factor(poc_man)1" = "POC man"
+                              , "as.factor(majority_party)1 " = "Majority party"
+                              , "as.factor(unopposed)1" = "Unopposed"
+                              , "proximity_to_floor_centroid" = "Proximity to floor"
+                              , "as.factor(caucus_member)1" = "Caucus member"
+                              , "nominate_dim2" = "Nominate dim 2"
+                              , "scale_votepct" = "Vote Pct."
+                              , "scale_speeches_daily" = "Daily speech number"
+                              , "scale_benchratiolag " = "Lagged benchmark ratio"
+                              , "scale_bills_sponsored" = "Num. bills sponsored"
+                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
+                              , "scale_votes_with_party_pct" = "Votes with party pct."
+                              ), 
+       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
+       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
+       He cosponsored 1267 bills in the 116th congress, while the next highest
+       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
+       caption = "Linear models regressed on centrality based on frame",
+       caption.above = TRUE, label = "tab:frame_lm"
+       )
+       
+
+```
+
+
+
+
+```{r LME_frames_make}
+# Do the same models but with random effects for congress and member
+
+library(lme4)
+set.seed(123)
+
+# Main variables (nominate, leadership, gender, race)
+lmeF.mainCovs <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(woman)
+  + as.factor(white)
+  
+  + (1|congress)
+  
+  , data = eigensFrames_legcovs
+)
+
+
+# Main vars + more identity variables
+lmeF.addIdentity <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + as.factor(poc_woman)
+  + as.factor(poc_man)
+  + as.factor(majority_party)
+  + as.factor(unopposed)
+  + proximity_to_floor_centroid
+  + as.factor(caucus_member)
+  
+  + (1|congress)
+
+  , data = eigensFrames_legcovs
+)
+
+
+# Main vars + more behavioral vars
+lmeF.addBehavioral <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  + (1|congress)
+  
+  , data = eigensFrames_legcovs
+)
+
+
+# Outlier removal
+    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
+    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
+      # When the average is 207, and the next highest is 614
+lmeF.addBehavioral.outlierRemoved <- lmer(
+  eigen_value_100 ~
+    
+    as.factor(party_leadership)
+  + as.factor(committee_leadership)
+  + scale_seniority
+  + scale_leslag
+  + nominate_dim1
+  + nominate_dim2
+  + as.factor(woman)
+  + as.factor(white)
+  + scale_votepct
+  + scale_speeches_daily
+  + scale_benchratiolag
+  + scale_bills_sponsored
+  + scale_bills_cosponsored
+  + scale_votes_with_party_pct
+  
+  + (1|congress)
+  
+  , data = filter(eigensFrames_legcovs, member_id != "F000466")
+)
+
+
+```
+
+Table \ref{tab:frame_lme} shows the results of mixed effects linear models regressed on centrality based on frame.
+
+
+```{r frame_lmer_table, include = TRUE, results = 'asis'}
+
+texreg(l = list(lmeF.mainCovs, lmeF.addIdentity, lmeF.addBehavioral, lmeF.addBehavioral.outlierRemoved),
+       custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
+       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
+                              , "as.factor(committee_leadership)1" = "Committee leadership"
+                              , "scale_seniority" = "Seniority"
+                              , "scale_leslag" = "Lagged LES"
+                              , "nominate_dim1" = "Nominate dim 1"
+                              , "as.factor(woman)1" = "Woman"
+                              , "as.factor(white)1" = "White"
+                              , "as.factor(poc_woman)1" = "POC woman"
+                              , "as.factor(poc_man)1" = "POC man"
+                              , "as.factor(majority_party)1 " = "Majority party"
+                              , "as.factor(unopposed)1" = "Unopposed"
+                              , "proximity_to_floor_centroid" = "Proximity to floor"
+                              , "as.factor(caucus_member)1" = "Caucus member"
+                              , "nominate_dim2" = "Nominate dim 2"
+                              , "scale_votepct" = "Vote Pct."
+                              , "scale_speeches_daily" = "Daily speech number"
+                              , "scale_benchratiolag " = "Lagged benchmark ratio"
+                              , "scale_bills_sponsored" = "Num. bills sponsored"
+                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
+                              , "scale_votes_with_party_pct" = "Votes with party pct."
+                              ),
+       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
+       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
+       He cosponsored 1267 bills in the 116th congress, while the next highest
+       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
+       caption = "Mixed effects linear models regressed on centrality based on frame",
+       caption.above = TRUE, label = "tab:frame_lme"
+       )
+
+       
+
+```
+
+
+
+
+
+
+
+
+
