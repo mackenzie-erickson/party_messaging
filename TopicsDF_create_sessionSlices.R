@@ -5,8 +5,7 @@
 # Date: 2022-04
 # Description: Load fitted STM model and original document data, 
   # get in cascade format, and fit diffusion network
-# Details: 
-# Following tutorial: NetworkInference Tutorial: Persistent Policy Diffusion Ties
+
 
 ##############################
 
@@ -38,52 +37,67 @@ leg_covariates.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/from_willia
 # Press releases - Republican House
 ##############################
 
-# Read in 20 topic models that were run on May 2 after removing state names
+# Read in 46 topic models that were run on July 14 after removing state and member names
 
 # STM-format processed data (trimmed/stemmed)
-out.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_stmPrepped_houseR.rds"))
+out.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_stmPrepped_houseR.rds"))
 
-# Fitted topics - 20 topics
-fit.R <- readRDS(paste0(getwd(), "/Data/output/noStateNames/attempt3/2022-05-02_Fit_20topics_houseR.rds"))
+# Fitted topics
+fit.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_Fit_46topics_noMemNames_houseR.rds"))
 
-######
-# Temp!
-#####
-out <- out.R
-fit <- fit.R
 
 
 ###
 # Press releases - Democratic House
 #############################
 
-# # STM-format processed data (trimmed/stemmed)
-# out <- readRDS(paste0(getwd(), "/Data/output/2022-04-18_stmPreppedCorpus_houseD.rds"))
-# 
-# # Fitted topics - 20 topics
-# fit <- readRDS(paste0(getwd(), "/Data/output/2022-04-18_Fit_20topics_houseD.rds"))
+# STM-format processed data (trimmed/stemmed)
+out.D <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_stmPrepped_houseD.rds"))
+
+# Fitted topics
+fit.D <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_Fit_46topics_noMemNames_houseD.rds"))
+
+
+###
+# Press releases - ALL House
+#############################
+
+# STM-format processed data (trimmed/stemmed)
+out.ALL <- readRDS(paste0(getwd(), "/Data/output/allTogether/2022-07-26_stmPrepped_houseALL.rds"))
+
+# Fitted topics
+fit.ALL <- readRDS(paste0(getwd(), "/Data/output/allTogether/2022-07-26_Fit_25topics_houseALL.rds"))
+
+
 
 
 ###################################################
 # Label each document with its most-probable topic
 ###################################################
 
+###
+# Make a data.tables of topic proportions
+###
+topics_DT.R <- make.dt(fit.R, meta = out.R$meta)
+topics_DT.D <- make.dt(fit.D, meta = out.D$meta)
+
+# Prob delete: 
+# fit.labels <- labelTopics(fit.R, 1:k, n = 7)
+# fit.labels.D <- labelTopics(fit.D, 1:k, n = 7)
+# 
+# labels.df.R <- data.frame(topic = fit.labels$topicnums,
+#                         topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "))
+# labels.df.D <- data.frame(topic = fit.labels.D$topicnums,
+#                           topic_label = apply(fit.labels.D$prob, 1, paste0, collapse = "; "))
+# 
+# 
+
 # Function to label each document with most-propable topic
 
-label_statement_topics.fns <- function(fit, out){
-
-# Make a data.table of topic proportions
-topics_DT <- make.dt(fit, meta = out$meta)
-
+label_statement_topics.fns <- function(topics_DT, fit, k){
 
 # Pivot DT longer
-# So that each doc is repeated 20 times (20 topics)
-# Format:
-  # indx; topic; prob
-  # 101; 1    ; 0.359
-  # 101; 2    ; 0.0003
-  # 101; 3    ; 0.0156
-  # ....
+# So that each doc is repeated k times (k topics)
 topics_long <- 
   pivot_longer(
   data = topics_DT,
@@ -107,22 +121,8 @@ topics.df <-
   topics_long %>% 
   distinct(indx, .keep_all = TRUE)
 
-
-###############
-# To do later:
-# Decide what to do about near-ties in topic probabilities
-# For example, about both education and STEM
-# If education is a very popular topic at the time, then we
-# probably want to say it's about education.
-# But if STEM is very popular, we probably want to say STEM
-# Maybe want to fit an STM taking congress # into account
-# Or year
-###############
-
-
 ###########################
 # Fix caucus info - something didn't merge properly
-# Should probably go back and fix this is the first script
 ##########################
 
 # Remove the incorrect caucus info
@@ -132,14 +132,12 @@ topics.df <-
             contains("_taskforces"), contains("_member")))
 
 
-
-#####################################################################
 # Add topic labels onto data.frame
 # To provide information about topics
 
 # Get STM-generated topic labels
-fit.labels <- labelTopics(fit, 1:20, n = 7)
-fit.labels_short <- labelTopics(fit, 1:20, n = 4) 
+fit.labels <- labelTopics(fit, 1:k, n = 10)
+fit.labels_short <- labelTopics(fit, 1:k, n = 4) 
 
 # Pull out 7-word summary, 3-word summary,  and topic #
 labels.df <- data.frame(topic = fit.labels$topicnums,
@@ -165,15 +163,17 @@ topics.df <-
 ###############
 # Apply topic label function
 ##############
-topics_df.R <-
-  label_statement_topics.fns(
-    fit = fit.R,
-    out = out.R)
+topics_df.R <- label_statement_topics.fns(topics_DT.R, fit.R, k = 23)
+topics_df.D <- label_statement_topics.fns(topics_DT.D, fit.D, k = 25)
 
-topics_df.D <-
-  label_statement_topics.fns(
-    fit = fit.D,
-    out = out.D)
+tmp <- topics_df.R %>% 
+  mutate(topic = as.integer(topic)) %>% 
+  select(topic, topic_label_short, topic_label) %>% 
+  arrange(topic) %>% 
+  unique() %>% 
+  as.data.frame()
+
+tmp %>% select(topic_label)
 
 
 
@@ -200,9 +200,6 @@ topics_df.R <- createSessionVar(topics_df.R)
 topics_df.D <- createSessionVar(topics_df.D)
 
 
-##### TEMP
-topics.df <- topics_df.R
-
 
 ###
 # Filter to first obs per session - Function
@@ -224,18 +221,15 @@ first.obs.D <- first.obs.fun(topics_df.D)
 
 
 
+###
+# Estimate networks - Function
+###
 
 estimateNetwork_outputEigens.fns <- function(first.obs){
   
-  sessionStartDate <- as.character(unique(first.obs$sessionStartDate))
+  results_list <- vector(mode = "list")
   
   for (i in unique(first.obs$sessionStartDate)) {
-    
-    #### TEMP
-    i <- unique(first.obs$sessionStartDate)[1]
-   
-    # Save variable for printing
-     sessionStartDate <- i
     
     # Filter dataset
      session.df <- 
@@ -264,282 +258,118 @@ estimateNetwork_outputEigens.fns <- function(first.obs){
        select(origin_node, destination_node) %>% 
        graph_from_data_frame(directed = TRUE)
      
-     # Reverse graph for reverse pagerank
-     reverse.graph <-
-       session.netinf.result %>% 
-       rename(destination_node = origin_node
-              , origin_node = destination_node) %>% 
-       graph_from_data_frame(directed = TRUE)
-     
-     
-     # Calculate eigenvector centrality
+     # Eigenvector centrality
      session.eiegens <- eigen_centrality(
        graph = session.graph
        , directed = TRUE
        , scale = TRUE
        , weights = NULL
      )
+     session.eigens <- data.frame(member_id = names(session.eiegens$vector)
+                                    , eigen = unname(session.eiegens$vector))
      
-     # Calculate out-degree
+     # Out-degree
      session.outdegree <- degree(graph = session.graph
                                  , mode = "out"
                                  , normalized = TRUE
                                  )
+     session.outdegree <- data.frame(member_id = names(session.outdegree)
+                                     , out_degree = unname(session.outdegree))
      
-     # Pagerank
+     
+     #  Pagerank
      session.pagerank <- page_rank(graph = session.graph
                                    , algo = "prpack"
                                    , directed = TRUE)
+     session.pagerank <- data.frame(member_id = names(session.pagerank$vector)
+                                    , pagerank = unname(session.pagerank$vector))
      
-     reverse.pagerank <- page_rank(graph = reverse.graph
-                                   , algo = "prpack"
-                                   , directed = TRUE
-                                   )
+     # Centrality DF
+     centrality.df <- 
+       session.eigens %>% 
+       full_join(session.outdegree, by = "member_id") %>% 
+       full_join(session.pagerank, by = "member_id") %>% 
+       mutate(sessionStartDate = i) 
+     centrality.df <- centrality.df %>% 
+       mutate(sessionStartDate = as.Date(sessionStartDate, origin = "1970-01-01"))
      
-     # Testing - comparing reverse pagerank and page rank
-     rev.pg <- data.frame(member_id = names(reverse.pagerank$vector)
-                          , rev.pgrank = unname(reverse.pagerank$vector))
-     pg <- data.frame(member_id = names(session.pagerank$vector)
-                      , rev.pgrank = unname(session.pagerank$vector))
-     
-     together <- full_join(pg, rev.pg, by = "member_id")
-     
+     results_list[[length(results_list) + 1]] <- centrality.df
      
   }
-  
-  
-  #######
-  # Transform into a cascades object
-  #######
-  
-  cascade <- as_cascade_long(
-    data = first.obs
-    , cascade_node_name = 'member_id'
-    , event_time = 'date_pr'
-    , cascade_id = 'topic'
-  )
-  
-  #######
-  # Infer edges based on a diffusion model
-  #######
-  
-  # Select # edges by, after each iteration of algorithm, check if the edge
-  # added sig. improvement to the network
-  # Select parameters automatically
-  
-  auto.netinf.result <- netinf(
-    cascades = cascade
-    , trans_mod = "exponential"
-    , p_value_cutoff = 0.1
-    # , params = 0.5 # lambda/rate
-  )
-  
-  #######
-  # Calculate eigenvector centrality
-  #######
-  
-  # Convert graph to igraph format (directed ties)
-  netinf.graph <- 
-    auto.netinf.result %>% 
-    select(origin_node, destination_node) %>% 
-    graph_from_data_frame()
-  
-  # Calculate eigenvector centrality
-  eigens_result <- eigen_centrality(
-    graph = netinf.graph
-    , directed = TRUE
-    , scale = TRUE
-    , weights = NULL
-  )
-  
-  #######
-  # Create eigens DF
-  # Pull out eigen values, member_id, congress, and index
-  #######
-  
-  eigens_df <- data.frame(
-    member_id = names(eigens_result$vector),
-    eigen_value = unname(eigens_result$vector),
-    sessionStartDate = sessionStartDate
-  )
-  
-} # End estimateNetwork_outputEigens.fns
-
-
-session.nets <- plyr::dlply(.data = first.obs, .variables = "sessionStartDate", .fun = estimateNetwork_outputEigens.fns, first.obs)
-
-
+  return(results_list)
+}
 
 
 ###
-# Start Function
+# Apply networks and centrality function
 ###
-first.obs.fun <- function(topics.df, yearMonth){
+set.seed(1776)
+centrality.list.R <- estimateNetwork_outputEigens.fns(first.obs.R)
+centrality.list.D <- estimateNetwork_outputEigens.fns(first.obs.D)
   
 
-# Filter to one congress session
-topics.congress <- 
-  topics.df %>% 
-  filter(congress == congressNum)
-
-# Select the first use of each topic by member
-# Group by topic, then by member
-# Keep first use
-first.obs <- 
-  topics.congress %>% 
-  group_by(topic, member_id) %>% 
-  arrange(date_pr, .by_group = TRUE) %>% 
-  distinct(member_id, topic, .keep_all = TRUE) %>% 
-  ungroup()
-
-} # end first.obs.fun
-
-###############
-# Apply Function: First topic observations by member
-##############
-
-
-firstObs_113 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 113)
-
-firstObs_114 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 114)
-
-firstObs_115 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 115)
-
-firstObs_116 <- first.obs.fun(topics.df = topics_df.R
-                              , congressNum = 116)
-
-# Pull all firstObs together
-firstObs_all <- bind_rows(firstObs_113, firstObs_114, firstObs_115, firstObs_116)
-
-
-
-
-
-
-##############################
-# NetInf Function
-
-  # Create Cascades
-  # Infer edges/ estimate network
-  # Calculate eigencentrality for each member
-##############################
-
-estimateNetwork_outputEigens.fns <- function(first.obs, congressNum){
-  
-
-#######
-# Transform into a cascades object
-#######
-  
-congress_Cascade <- as_cascade_long(
-  data = first.obs
-  , cascade_node_name = 'member_id'
-  , event_time = 'date_pr'
-  , cascade_id = 'topic'
-)
-  
-  # # Investigate cascades - just playing around
-  # summary(congress_Cascade)
-  # 
-  # # Convert event times to dates
-  # cascades_dates <-
-  #   congress_Cascade %>% 
-  #   modify_depth(2) %>% 
-  #   mutate(event_time = as.Date(event_time, origin = "1970-01-01"))
-  # 
-  # 
-  # # Visualize cascades
-  # cascade_ids <- unique(first.obs$topic)
-  # selection <- cascade_ids[c(1)]
-  # plot(congress_Cascade, label_nodes = TRUE, selection = selection)
-  # 
-  # p <- plot(congress_Cascade
-  #      , label_nodes = TRUE
-  #      , selection = 1)
-  # 
-  # p + 
-  #   scale_x_date()
-
-#######
-# Infer edges based on a diffusion model
-#######
-
-# Select # edges by, after each iteration of algorithm, check if the edge
-  # added sig. improvement to the network
-# Select parameters automatically
-
-auto.netinf.result <- netinf(
-  cascades = congress_Cascade
-  , trans_mod = "exponential"
-  , p_value_cutoff = 0.1
-  # , params = 0.5 # lambda/rate
-  )
-
-
-#######
-# Calculate eigenvector centrality
-#######
-
-# Convert graph to igraph format (directed ties)
-netinf.graph <- 
-  auto.netinf.result %>% 
-  select(origin_node, destination_node) %>% 
-  graph_from_data_frame()
-
-# Calculate eigenvector centrality
-eigens_result <- eigen_centrality(
-  graph = netinf.graph
-  , directed = TRUE
-  , scale = TRUE
-  , weights = NULL
-)
-
-#######
-# Create eigens DF
-# Pull out eigen values, member_id, congress, and index
-#######
-
-eigens_df <- data.frame(
-  member_id = names(eigens_result$vector),
-  eigen_value = unname(eigens_result$vector),
-  congress = congressNum
-)
-
-
-} # End estimateNetwork_outputEigens.fns
-
-##########################################################
-
-
-
-
-#######
-# Apply Function: Estimate network/eigencentrality
-#######
-
-set.seed(4445)
-
-eigens_113 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_113
-                                               , congressNum = 113)
-
-eigens_114 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_114
-                                               , congressNum = 114)
-
-eigens_115 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_115
-                                               , congressNum = 115)
-
-eigens_116 <- estimateNetwork_outputEigens.fns(first.obs = firstObs_116
-                                               , congressNum = 116)
-
-# Merge data together
-eigens_all <- bind_rows(eigens_113, eigens_114, eigens_115, eigens_116)
-
-
+# Flatten to df
+centrality.df.R <-  setNames(u <- do.call(rbind, centrality.list.R), nm = names(centrality.list.R[[1]]))
+centrality.df.D <-  setNames(u <- do.call(rbind, centrality.list.D), nm = names(centrality.list.D[[1]]))
 
 ###############################################################
+
+# Add in congress covariate; add in number of press releases; join with centrality df
+
+###
+# Number PRs - Function
+###
+
+numPR.fns <- function(topics.df, first.obs, centrality.df) {
+  # Number the PRs (total)
+  numPR_total <-
+    topics.df %>% 
+    group_by(member_id, sessionStartDate) %>% 
+    count() %>% 
+    rename(numPR_total = n) 
+  
+  numPR_total <-
+    numPR_total %>% 
+    mutate(numPR_total_ln = log(numPR_total))
+  
+  # Number of PRs (first.obs)
+  numPR_firstObs <- 
+    first.obs %>% 
+    group_by(member_id, sessionStartDate) %>% 
+    count() %>% 
+    rename(numPR_firstobs = n)
+  
+  numPR_firstObs <-
+    numPR_firstObs %>% 
+    mutate(numPR_firstobs_ln = log(numPR_firstobs))
+  
+  # Merge together
+  numPR.df <-
+    full_join(numPR_total, numPR_firstObs
+              , by = c("member_id", "sessionStartDate"))
+  
+  # Add congress variable
+  numPR.df <-
+    left_join(numPR.df, distinct(select(first.obs, member_id, sessionStartDate, congress))
+              , by = c("member_id", "sessionStartDate"))
+  
+  
+  # Merge onto centrality.df
+  new.centrality.df <- 
+    left_join(centrality.df, numPR.df
+              , by = c("member_id", "sessionStartDate")) 
+  
+  return(new.centrality.df)
+}
+
+###
+# Apply function
+###
+new.centrality.df.R <- numPR.fns(topics_df.R, first.obs.R, centrality.df.R)
+new.centrality.df.D <- numPR.fns(topics_df.D, first.obs.D, centrality.df.D)
+
+
+
 # COVARIATES - Create
 
 ###
@@ -563,66 +393,181 @@ leg_covs <-
   leg_covs %>% 
   mutate(scale_speeches_daily = scale(n_speeches_daily))
 
-###
-# ProPublica covariates
-###
-
-# Pull in ProPublica data from STM
-propubdat <- out.R$meta
-
-# Pull out relevant vars
-propubdat.relevant <-
-  propubdat %>% 
-  select(member_id
-         , congress
-         , bills_sponsored
-         , bills_cosponsored
-         , contains("_member")
-         , votes_with_party_pct)
-
-# Mutate relevant vars
-propubdat.relevant <-
-  propubdat.relevant %>% 
-  mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
-         , scale_bills_cosponsored = scale(bills_cosponsored) # scale
-         , scale_votes_with_party_pct = scale(votes_with_party_pct)
-         , caucus_member = 
-           # dummy for member of any caucus
-           ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
-  ) %>% 
-  select(member_id
-         , congress
-         , bills_sponsored
-         , bills_cosponsored
-         , votes_with_party_pct
-         , scale_bills_sponsored
-         , scale_bills_cosponsored
-         , scale_votes_with_party_pct
-         , caucus_member)
-
-# Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
-# Just select the correct ones so there is one member-congress only
-propubdat.relevantFixed <-
-  propubdat.relevant %>% 
-  group_by(member_id, congress) %>% 
-  arrange(desc(bills_cosponsored)
-          , desc(bills_sponsored)
-          , desc(caucus_member)
-          , desc(votes_with_party_pct)) %>% 
-  distinct(member_id, congress, .keep_all = TRUE)
 
 ###
-# Merge covariate DFs
+# Add ProPublica covariates - Function
 ###
 
-# Join ProPub (just Repubs) with leg_covs (Repubs and Dems)
-covariates.df <-
+propubVars.fun <- function(out, leg_covs){
+  
+  # Pull in ProPublica data from STM
+  propubdat <- out$meta
+  
+  # Pull out relevant vars
+  propubdat.relevant <-
+    propubdat %>% 
+    select(member_id
+           , congress
+           , bills_sponsored
+           , bills_cosponsored
+           , contains("_member")
+           , votes_with_party_pct)
+  
+  # Mutate relevant vars
+  propubdat.relevant <-
+    propubdat.relevant %>% 
+    mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
+           , scale_bills_cosponsored = scale(bills_cosponsored) # scale
+           , scale_votes_with_party_pct = scale(votes_with_party_pct)
+           , caucus_member = 
+             # dummy for member of any caucus
+             ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
+    ) %>% 
+    select(member_id
+           , congress
+           , bills_sponsored
+           , bills_cosponsored
+           , votes_with_party_pct
+           , scale_bills_sponsored
+           , scale_bills_cosponsored
+           , scale_votes_with_party_pct
+           , caucus_member)
+  
+  # Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
+  # Just select the correct ones so there is one member-congress only
+  propubdat.relevantFixed <-
+    propubdat.relevant %>% 
+    group_by(member_id, congress) %>% 
+    arrange(desc(bills_cosponsored)
+            , desc(bills_sponsored)
+            , desc(caucus_member)
+            , desc(votes_with_party_pct)) %>% 
+    distinct(member_id, congress, .keep_all = TRUE)
+  
+  ###
+  # Merge covariate DFs
+  ###
+  
+  # Join ProPub (just Repubs) with leg_covs (Repubs and Dems)
+  covariates.df <-
+    left_join(
+      propubdat.relevantFixed
+      , leg_covs
+      , by = c("member_id" = "bioguide_id"
+               , "congress" = "congress")
+    )
+   
+  return(covariates.df)
+}
+
+###
+# Apply function
+###
+covariates.df.R <- propubVars.fun(out.R, leg_covs)
+covariates.df.D <- propubVars.fun(out.D, leg_covs)
+
+
+
+
+####
+# Merge centrality.df with covariates.df
+####
+
+centrality_legCovs.R <-
   left_join(
-    propubdat.relevantFixed
-    , leg_covs
-    , by = c("member_id" = "bioguide_id"
-             , "congress" = "congress")
+    new.centrality.df.R
+    , covariates.df.R,
+    by = c("member_id", "congress")
   )
+
+centrality_legCovs.D <-
+  left_join(
+    new.centrality.df.D
+    , covariates.df.D
+    , by = c("member_id", "congress")
+  )
+
+
+###
+# Merge Democrats and Republicans togther
+###
+
+dat <- rbind(centrality_legCovs.D, centrality_legCovs.R)
+
+
+
+##########################################################################
+# VALIDATION:
+
+###
+# Panel correlation (test-retest validity)
+###
+
+
+###
+# Calculate correlations - Function
+###
+
+centrality.cors.funs <- function(dat, metric = "eigen"){
+  # Shape into wide format with each member as a column
+  dat.wide <- reshape2::dcast(dat
+                              , sessionStartDate ~ member_id
+                              , value.var = metric)[,-1]
+  
+  # Calculate the correlation per member by looping over the columns:
+  cors <-
+    apply(dat.wide
+          , 2
+          , function(x){
+            cor(x, seq.int(nrow(dat.wide)), use = 'pairwise.complete.obs')
+          })
+}
+
+###
+# Apply function to all centrality measures
+###
+eigen.cors <- centrality.cors.funs(dat, "eigen")
+out_degree.cors <- centrality.cors.funs(dat, "out_degree")
+pagerank.cor <- centrality.cors.funs(dat, "pagerank")
+
+
+tmp <- data.frame(name = c("paul", "mary", "susan")
+                  , time1 = c(1, 2, 3)
+                  , time2 = c(1.2, 2.8, -1)
+                  , time3 = c(0.8, 3, 10))
+
+tmp <- data.frame(
+  paul = c(1, 1.2, 0.8)
+  , mary = c(2, 2.8, 3)
+  , susan = c(3, -1, 10)
+)
+
+apply(tmp
+      , 2
+      , function(x){
+  cor(x, seq.int(nrow(tmp)))
+  })
+
+
+ggplot(data = filter(dat, member_id %in% sample(dat$member_id, 5))) +
+  geom_point(aes(
+    x = eigen
+    , y = pagerank
+    , color = member_id), size = 5) +
+  theme_minimal() +
+  scale_color_discrete(type = RColorBrewer::brewer.pal(5, "Set1"))
+
+# Correlation between pagerank and eigen
+mat1 <- dat %>% select(pagerank, eigen) %>% as.matrix()
+cor(mat1)
+
+
+###########################################################################
+
+
+
+
+
 
 
 ##########################################################
@@ -630,24 +575,13 @@ covariates.df <-
 ###########################################################
 
 
-####
-# Merge eigencentrality.df with covariates.df
-####
 
-
-# Merge covariates with eigens df
-eigensTopics_legCovs <-
-  left_join(
-    eigens_all
-    , covariates.df,
-    by = c("member_id", "congress")
-  )
-
+####### STOPPED HERE - Start here
 
 
 # Transform eigen value to make more readable (multiple by 100)
-eigensTopics_legCovs <-
-  eigensTopics_legCovs %>% 
+dat <-
+  dat %>% 
   mutate(eigen_value_100 = eigen_value * 100)
 
 
