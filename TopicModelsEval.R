@@ -577,7 +577,7 @@ ggplot(freq.leaderrank.long
        , aes(y = factor(topicName)
              , x = freq
              , fill = factor(leadership))) +
-  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "black") +
+  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "dark gray") +
   theme_bw() +
   scale_fill_manual(values = c("dark gray", "white")
                     , name = ""
@@ -586,60 +586,153 @@ ggplot(freq.leaderrank.long
   xlab("Dem                                                           Rep") +
   scale_x_continuous(breaks = c(-10, 0, 10), 
                      labels = paste0(c(10, 0, 10),"%")) +
-  geom_vline(xintercept = 0) +
-  ggtitle("Difference in topic attention between leadership and rank-and-file")
+  geom_vline(xintercept = 0, color = "dark gray") +
+  ggtitle("Topic allocation varies between leadership and rank-and-file")
 
 
 
-# Make leader-rank figure - R
-ggplot(freq.leaderrank.R
-       , aes(y = factor(topicName)
-             , x = freq
-             , fill = factor(leadership))) +
-  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "black") +
-  theme_minimal() +
-  scale_fill_manual(values = c("dark gray", "white")
-                    , name = ""
-                    , labels = c("Leadership", "Rank-and-file")) +
-  labs(x = "", y = "") +
-  scale_x_continuous(breaks = seq(0, 15, 5)
-                     , labels = paste0(seq(0, 15, 5), "%")) +
-  ggtitle("Difference in topic attention between leadership and rank-and-file"
-          , subtitle = "House Republicans")
+############################
+# Frequency by seniority
+
+seniority.freq.fns <- function(topicsWithNames) {
+  # Pull seniority quantiles
+  quantiles <- quantile(topicsWithNames$seniority, na.rm = TRUE)
+  
+  # Split into quartiles
+  seniority <-
+    topicsWithNames %>%
+    mutate(quartile =
+             ifelse(
+               seniority < quantiles[2],
+               1
+               ,
+               ifelse(
+                 seniority >= quantiles[2] & seniority < quantiles[3],
+                 2
+                 ,
+                 ifelse(
+                   seniority >= quantiles[3] & seniority < quantiles[4],
+                   3
+                   ,
+                   ifelse(seniority >= quantiles[4], 4
+                          ,
+                          NA
+                   )))))
+  
+  # Frequency for each
+  seniority.freq <-
+    seniority %>%
+    filter(salient == 1) %>%
+    group_by(quartile, topicName) %>% 
+    summarise(cnt = n()
+              , quartile = unique(quartile)) %>%
+    mutate(freq = round(cnt / sum(cnt), 3)) %>%
+    arrange(desc(freq)) %>%
+    select(topicName, freq, quartile) %>% 
+    ungroup()
+  
+  # Turn into pcts 
+  seniority.freq <-
+    seniority.freq %>% 
+    mutate(freq = 100 * freq)
+  
+} # End seniority.freq.fns
   
 
-# Make leader-rank figure - D
-ggplot(freq.leaderrank.D
-       , aes(y = factor(topicName)
-             , x = freq
-             , fill = factor(leadership))) +
-  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "black") +
-  theme_minimal() +
-  scale_fill_manual(values = c("dark gray", "white")
-                    , name = ""
-                    , labels = c("Leadership", "Rank-and-file")) +
-  labs(x = "", y = "") +
-  scale_x_continuous(breaks = seq(0, 15, 5)
-                     , labels = paste0(seq(0, 15, 5), "%")) +
-  ggtitle("Difference in topic attention between leadership and rank-and-file"
-          , subtitle = "House Democrats")
+# Apply function
+seniority.freq.R <- seniority.freq.fns(topicsWithNames.R) %>% mutate(party = "R")
+seniority.freq.D <- seniority.freq.fns(topicsWithNames.D) %>% mutate(party = "D")
 
+# Merge together
+seniority.freq.all <- 
+  full_join(seniority.freq.R
+            , seniority.freq.D
+            , by = c("topicName", "quartile")) %>% 
+  rename(freq.R = freq.x
+         , freq.D = freq.y)
 
-
-# Edit for figure
-freq.both.edit <-
-  freq.both %>% 
-  mutate(freq.D = 100 * freq.D
-         , freq.R = 100 * freq.R) %>% 
+# Turn Dem's into negative for now
+seniority.freq.all <-
+  seniority.freq.all %>% 
   mutate(freq.D = as.numeric(paste0("-", freq.D)))
 
 # Pivot longer
-freq.both.long <-
-  pivot_longer(data = freq.both.edit
-               , cols = c("freq.R", "freq.D")
+seniority.freq.long <-
+  seniority.freq.all %>% 
+  pivot_longer(cols = c("freq.R", "freq.D")
                , names_to = "party"
                , names_prefix = "freq."
-               , values_to = "freq")
+               , values_to = "freq") %>% 
+  select(-c(party.x, party.y))
+
+# Subset to !is.na(seniority quartile)
+seniority.freq.long <-
+  seniority.freq.long %>% 
+  filter(is.na(quartile) == FALSE)
+
+#############
+# Leadership vs rank-and-file Figure (both parties) - Make
+############
+ggplot(filter(seniority.freq.long, quartile %in% c(1, 4))
+       , aes(y = factor(topicName)
+             , x = freq
+             , fill = factor(quartile))) +
+  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "dark gray") +
+  theme_bw() +
+  scale_fill_manual(values = c("dark gray", "white")
+                    , name = ""
+                    , labels = c("Freshmen", "Top-quartile \nseniors")) +
+  ylab("") +
+  xlab("Dem                                                           Rep") +
+  scale_x_continuous(limits = c(-12, 12)
+                     , breaks = c(-10, 0, 10), 
+                     labels = paste0(c(10, 0, 10),"%")) +
+  geom_vline(xintercept = 0, color = "dark gray") +
+  ggtitle("Topic allocation varies by seniority")
+
+# Note: Republican members in the top quartile of seniority have between 6 and 24
+# years of experience; Democratic members in the top quarilte have between
+# 12 and 27 years. 
+
+
+################################################################
+# This section assumes first.obs.fun has been created (around line 190)
+
+# Get first obs from topic Name info
+first.obsNames.R <- first.obs.fun(topicsWithNames.R)
+first.obsNames.D <- first.obs.fun(topicsWithNames.D)
+
+
+
+###############
+# Plot the CDF of first observations by session
+
+# TO DO: Fix the naming of these variables, get a function going
+# Ignore the x-axis for now - can always fix if actually using
+# Make a few (2 dems and 2 reps, one for each session maybe)
+
+# Filter to one session
+# (insert here)
+
+# Add a length variable for each topic for the session (need for some reason)
+df <- plyr::ddply(session.tmp
+                  , .variables = c("topicName")
+                  , transform
+                  , len = length(date_pr))
+
+
+# Plot
+ggplot(df, aes(x = date_pr, group = topicName)) + 
+  geom_step(aes(len = len
+                , y = ..y.. * len)
+            , stat="ecdf") +
+  facet_wrap(~ topicName) +
+  theme_bw()
+
+
+
+
+
 
 
 
