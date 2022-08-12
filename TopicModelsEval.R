@@ -703,6 +703,25 @@ first.obsNames.R <- first.obs.fun(topicsWithNames.R)
 first.obsNames.D <- first.obs.fun(topicsWithNames.D)
 
 
+####
+# Add 'session' variable
+first.obsNames.R <- first.obsNames.R %>% 
+  mutate(session = 
+           ifelse(
+             sessionStartDate %in% 
+               as.Date(c("2013-01-03", "2015-01-06", "2017-01-03", "2019-01-03"))
+                          , 1, 2
+                          ))
+
+first.obsNames.D <- first.obsNames.D %>% 
+  mutate(session = 
+           ifelse(
+             sessionStartDate %in% 
+               as.Date(c("2013-01-03", "2015-01-06", "2017-01-03", "2019-01-03"))
+             , 1, 2
+           ))
+
+
 
 ###############
 # Plot the CDF of first observations by session
@@ -711,23 +730,50 @@ first.obsNames.D <- first.obs.fun(topicsWithNames.D)
 # Ignore the x-axis for now - can always fix if actually using
 # Make a few (2 dems and 2 reps, one for each session maybe)
 
-# Filter to one session
-# (insert here)
+cumsumplot.fns <- function(first.obsNames, congress, session, party = c("Democrats", "Republicans")){
+  
+  # For some reason, variable names need to be changed
+  congress.selection <- congress
+  session.selection <- session
+  
+  # Filter to congress, session
+  session.firstobs <- first.obsNames %>% 
+    filter(congress == congress.selection & session == session.selection) %>% 
+    filter(salient == 1)
+  
+  
+  # Add a length variable for each topic for the session (need for some reason)
+  session.firstobs.len <- plyr::ddply(session.firstobs
+                    , .variables = c("topicName")
+                    , transform
+                    , len = length(date_pr))
+  
+  # Plot
+  ggplot(session.firstobs.len, aes(x = date_pr, group = topicName)) + 
+    geom_step(aes(len = len
+                  , y = ..y.. * len)
+              , stat="ecdf") +
+    facet_wrap(~ topicName, scales = "free_y") +
+    theme_bw() +
+    labs(x = "", y = "") +
+    ggtitle(paste0(
+      "Cumulative topic usage by House ", party)
+      , subtitle = paste0(congress, "th ", "congress, session ", session))
 
-# Add a length variable for each topic for the session (need for some reason)
-df <- plyr::ddply(session.tmp
-                  , .variables = c("topicName")
-                  , transform
-                  , len = length(date_pr))
-
+  } # end cumsumplot.fns
 
 # Plot
-ggplot(df, aes(x = date_pr, group = topicName)) + 
-  geom_step(aes(len = len
-                , y = ..y.. * len)
-            , stat="ecdf") +
-  facet_wrap(~ topicName) +
-  theme_bw()
+cumsumplot.fns(first.obsNames = first.obsNames.R
+               , congress = 113
+               , session = 1
+               , party = "Republicans")
+
+cumsumplot.fns(first.obsNames = first.obsNames.D
+               , congress = 114
+               , session = 2
+               , party = "Democrats")
+
+
 
 
 
