@@ -1,6 +1,6 @@
 ###############################
 
-# SNetInf.R
+# TopicsDF_create_sessionSlices.R
 # Author: Mackenzie Weiler
 # Date: 2022-04
 # Description: Load fitted STM model and original document data, 
@@ -31,7 +31,7 @@ setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversi
 ##############################
 
 leg_covariates.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/from_williams/legislative_covariates.rds"))
-
+committee.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/committee-data-for-mac-2022-05-27.rds"))
 
 ###
 # Press releases - Republican House
@@ -43,7 +43,7 @@ leg_covariates.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/from_willia
 out.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_stmPrepped_houseR.rds"))
 
 # Fitted topics
-fit.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_Fit_46topics_noMemNames_houseR.rds"))
+fit.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-08-01_Fit_30topics_houseR.rds"))
 
 
 
@@ -55,18 +55,7 @@ fit.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_Fit_46topics_n
 out.D <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_stmPrepped_houseD.rds"))
 
 # Fitted topics
-fit.D <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_Fit_46topics_noMemNames_houseD.rds"))
-
-
-###
-# Press releases - ALL House
-#############################
-
-# STM-format processed data (trimmed/stemmed)
-out.ALL <- readRDS(paste0(getwd(), "/Data/output/allTogether/2022-07-26_stmPrepped_houseALL.rds"))
-
-# Fitted topics
-fit.ALL <- readRDS(paste0(getwd(), "/Data/output/allTogether/2022-07-26_Fit_25topics_houseALL.rds"))
+fit.D <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-08-01_Fit_30topics_houseD.rds"))
 
 
 
@@ -81,16 +70,6 @@ fit.ALL <- readRDS(paste0(getwd(), "/Data/output/allTogether/2022-07-26_Fit_25to
 topics_DT.R <- make.dt(fit.R, meta = out.R$meta)
 topics_DT.D <- make.dt(fit.D, meta = out.D$meta)
 
-# Prob delete: 
-# fit.labels <- labelTopics(fit.R, 1:k, n = 7)
-# fit.labels.D <- labelTopics(fit.D, 1:k, n = 7)
-# 
-# labels.df.R <- data.frame(topic = fit.labels$topicnums,
-#                         topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "))
-# labels.df.D <- data.frame(topic = fit.labels.D$topicnums,
-#                           topic_label = apply(fit.labels.D$prob, 1, paste0, collapse = "; "))
-# 
-# 
 
 # Function to label each document with most-propable topic
 
@@ -163,17 +142,10 @@ topics.df <-
 ###############
 # Apply topic label function
 ##############
-topics_df.R <- label_statement_topics.fns(topics_DT.R, fit.R, k = 23)
-topics_df.D <- label_statement_topics.fns(topics_DT.D, fit.D, k = 25)
+topics_df.R <- label_statement_topics.fns(topics_DT.R, fit.R, k = 30)
+topics_df.D <- label_statement_topics.fns(topics_DT.D, fit.D, k = 30)
 
-tmp <- topics_df.R %>% 
-  mutate(topic = as.integer(topic)) %>% 
-  select(topic, topic_label_short, topic_label) %>% 
-  arrange(topic) %>% 
-  unique() %>% 
-  as.data.frame()
 
-tmp %>% select(topic_label)
 
 
 
@@ -191,6 +163,17 @@ createSessionVar <- function(topics.df){
       , yes = as.character(session_1_startDate)
       , no = as.character(session_2_startDate))) %>% 
     mutate(sessionStartDate = as.Date(sessionStartDate))
+  
+  ##
+  # Add 'session' variable
+  topics.df2 <- topics.df %>% 
+    mutate(session = 
+             ifelse(
+               sessionStartDate %in% 
+                 as.Date(c("2013-01-03", "2015-01-06", "2017-01-03", "2019-01-03"))
+               , 1, 2
+             ))
+  return(topics.df2)
 }
 
 ###
@@ -199,7 +182,20 @@ createSessionVar <- function(topics.df){
 topics_df.R <- createSessionVar(topics_df.R)
 topics_df.D <- createSessionVar(topics_df.D)
 
+#########
+# Load in manual topic names and salience
+########
+topicNames.R <- readxl::read_xlsx(paste0(getwd(), "/Data/Other/topicNames_30k_R.xlsx")) %>% mutate(topic = as.character(topic))
+topicNames.D <- readxl::read_xlsx(paste0(getwd(), "/Data/Other/topicNames_30k_D.xlsx")) %>% mutate(topic = as.character(topic))
 
+# Merge with topics_df
+topics_df.R <- 
+  left_join(topics_df.R, topicNames.R,
+            by = c("topic", "topic_label"))
+
+topics_df.D <- 
+  left_join(topics_df.D, topicNames.D,
+            by = c("topic", "topic_label"))
 
 ###
 # Filter to first obs per session - Function
@@ -218,6 +214,15 @@ first.obs.fun <- function(topics.df){
 ###
 first.obs.R <- first.obs.fun(topics_df.R)
 first.obs.D <- first.obs.fun(topics_df.D)
+
+
+###
+# Filter to politically-salient topics
+###
+politSalient.R <- first.obs.R %>% 
+  filter(salient == 1)
+politSalient.D <- first.obs.D %>% 
+  filter(salient == 1)
 
 
 
@@ -505,61 +510,32 @@ dat <- rbind(centrality_legCovs.D, centrality_legCovs.R)
 
 
 ###
-# Calculate correlations - Function
+# Calculate Intra-cluster correlation
 ###
 
-centrality.cors.funs <- function(dat, metric = "eigen"){
-  # Shape into wide format with each member as a column
-  dat.wide <- reshape2::dcast(dat
-                              , sessionStartDate ~ member_id
-                              , value.var = metric)[,-1]
+
+# Shape into wide format with each eigenscore at time, t as a column
+dat.wide <- reshape2::dcast(dat
+                            , member_id ~ sessionStartDate
+                            , value.var = "eigen")[,-1]
+
+# Calculate intra cluster correlation
+psych::ICC(dat.wide, missing = FALSE, alpha = 0.05, lmer = TRUE, check.keys = FALSE)
+
+# Calculate Pearson correlations
+cor(dat.wide, use = "pairwise.complete.obs")
   
-  # Calculate the correlation per member by looping over the columns:
-  cors <-
-    apply(dat.wide
-          , 2
-          , function(x){
-            cor(x, seq.int(nrow(dat.wide)), use = 'pairwise.complete.obs')
-          })
-}
+# Plot ICC
+BlandAltmanLeh::bland.altman.plot(dat.wide$`2014-01-03`, dat.wide$`2020-01-03`)
+
+test1vector, test2vector, data, main = "test retest", xlab = "means", ylab = "differences)
 
 ###
-# Apply function to all centrality measures
+# Plot correlation
 ###
-eigen.cors <- centrality.cors.funs(dat, "eigen")
-out_degree.cors <- centrality.cors.funs(dat, "out_degree")
-pagerank.cor <- centrality.cors.funs(dat, "pagerank")
+ggplot() +
+  geom_histogram(aes(x = eigen.cors))
 
-
-tmp <- data.frame(name = c("paul", "mary", "susan")
-                  , time1 = c(1, 2, 3)
-                  , time2 = c(1.2, 2.8, -1)
-                  , time3 = c(0.8, 3, 10))
-
-tmp <- data.frame(
-  paul = c(1, 1.2, 0.8)
-  , mary = c(2, 2.8, 3)
-  , susan = c(3, -1, 10)
-)
-
-apply(tmp
-      , 2
-      , function(x){
-  cor(x, seq.int(nrow(tmp)))
-  })
-
-
-ggplot(data = filter(dat, member_id %in% sample(dat$member_id, 5))) +
-  geom_point(aes(
-    x = eigen
-    , y = pagerank
-    , color = member_id), size = 5) +
-  theme_minimal() +
-  scale_color_discrete(type = RColorBrewer::brewer.pal(5, "Set1"))
-
-# Correlation between pagerank and eigen
-mat1 <- dat %>% select(pagerank, eigen) %>% as.matrix()
-cor(mat1)
 
 
 ###########################################################################
