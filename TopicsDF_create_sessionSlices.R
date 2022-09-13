@@ -13,7 +13,8 @@ rm(list = ls())
 
 # Packages
 packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
-              "stringr", "stm", "quanteda")
+              "stringr", "stm", "quanteda",
+              "texreg", "knitr", "kableExtra")
 
 # Load packages
 lapply(packages, require, character.only = TRUE)
@@ -523,12 +524,13 @@ dat.wide <- reshape2::dcast(dat
 psych::ICC(dat.wide, missing = FALSE, alpha = 0.05, lmer = TRUE, check.keys = FALSE)
 
 # Calculate Pearson correlations
-cor(dat.wide, use = "pairwise.complete.obs")
+eigen.cors <- cor(dat.wide, use = "pairwise.complete.obs")
   
 # Plot ICC
-BlandAltmanLeh::bland.altman.plot(dat.wide$`2014-01-03`, dat.wide$`2020-01-03`)
+BlandAltmanLeh::bland.altman.plot(dat.wide$`2014-01-03`, dat.wide$`2020-01-03`
+                                  , main = "Test-retest", xlab = "means", ylab = "differences")
 
-test1vector, test2vector, data, main = "test retest", xlab = "means", ylab = "differences)
+
 
 ###
 # Plot correlation
@@ -558,7 +560,7 @@ ggplot() +
 # Transform eigen value to make more readable (multiple by 100)
 dat <-
   dat %>% 
-  mutate(eigen_value_100 = eigen_value * 100)
+  mutate(eigen_100 = eigen * 100)
 
 
 ####
@@ -567,7 +569,7 @@ dat <-
 
 # Main variables (nominate, leadership, gender, race)
 modT.mainCovs <- lm(
-  eigen_value_100 ~
+  eigen_100 ~
     
     as.factor(party_leadership)
   + as.factor(committee_leadership)
@@ -577,14 +579,14 @@ modT.mainCovs <- lm(
   + as.factor(woman)
   + as.factor(white)
   
-  , data = eigensTopics_legCovs
+  , data = dat
 )
 
 summary(modT.mainCovs)
 
 # Main vars + more identity variables
 modT.addIdentity <- lm(
-  eigen_value_100 ~
+  eigen_100 ~
     
     as.factor(party_leadership)
   + as.factor(committee_leadership)
@@ -598,14 +600,14 @@ modT.addIdentity <- lm(
   + proximity_to_floor_centroid
   + as.factor(caucus_member)
 
-  , data = eigensTopics_legCovs
+  , data = dat
 )
 
 summary(modT.addIdentity)
 
 # Main vars + more behavioral vars
 modT.addBehavioral <- lm(
-  eigen_value_100 ~
+  eigen_100 ~
     
     as.factor(party_leadership)
   + as.factor(committee_leadership)
@@ -622,7 +624,7 @@ modT.addBehavioral <- lm(
   + scale_bills_cosponsored
   + scale_votes_with_party_pct
   
-  , data = eigensTopics_legCovs
+  , data = dat
 )
 
 summary(modT.addBehavioral)
@@ -632,7 +634,7 @@ summary(modT.addBehavioral)
     # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
       # When the average is 207, and the next highest is 614
 modT.addBehavioral.outlierRemoved <- lm(
-  eigen_value_100 ~
+  eigen_100 ~
     
     as.factor(party_leadership)
   + as.factor(committee_leadership)
@@ -649,7 +651,7 @@ modT.addBehavioral.outlierRemoved <- lm(
   + scale_bills_cosponsored
   + scale_votes_with_party_pct
   
-  , data = filter(eigensTopics_legCovs, member_id != "F000466")
+  , data = filter(dat, member_id != "F000466")
 )
 
 
@@ -657,6 +659,44 @@ summary(modT.mainCovs)
 summary(modT.addIdentity)
 summary(modT.addBehavioral)
 summary(modT.addBehavioral.outlierRemoved)
+
+### TO DO: Need to add fixed effects for party
+
+
+#####################
+# Create LaTeX table
+texreg(l = list(modT.mainCovs, modT.addIdentity, modT.addBehavioral, modT.addBehavioral.outlierRemoved)
+       
+       , custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
+       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
+                              , "as.factor(committee_leadership)1" = "Committee leadership"
+                              , "scale_seniority" = "Seniority"
+                              , "scale_leslag" = "Lagged LES"
+                              , "nominate_dim1" = "Nominate dim 1"
+                              , "as.factor(woman)1" = "Woman"
+                              , "as.factor(white)1" = "White"
+                              , "as.factor(poc_woman)1" = "POC woman"
+                              , "as.factor(poc_man)1" = "POC man"
+                              , "as.factor(majority_party)1 " = "Majority party"
+                              , "as.factor(unopposed)1" = "Unopposed"
+                              , "proximity_to_floor_centroid" = "Proximity to floor"
+                              , "as.factor(caucus_member)1" = "Caucus member"
+                              , "nominate_dim2" = "Nominate dim 2"
+                              , "scale_votepct" = "Vote Pct."
+                              , "scale_speeches_daily" = "Daily speech number"
+                              , "scale_benchratiolag " = "Lagged benchmark ratio"
+                              , "scale_bills_sponsored" = "Num. bills sponsored"
+                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
+                              , "scale_votes_with_party_pct" = "Votes with party pct."
+       ),
+       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
+       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
+       He cosponsored 1267 bills in the 116th congress, while the next highest
+       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
+       caption = "Linear models regressed on centrality",
+       caption.above = TRUE)
+
+
 
 
 
@@ -666,19 +706,30 @@ summary(modT.addBehavioral.outlierRemoved)
 ##################################
 # Look at bar charts to see if anything stands out as highly correlated (factors)
 
-# Topics
-eigensTopics_legCovs %>%
-  ggplot( aes(x=eigen_value, fill=as.factor(party_leadership))) +
-  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity') +
+# Party leadership
+dat %>%
+  filter(!is.na(party_leadership)) %>% 
+  ggplot( aes(x=eigen_100, fill=as.factor(party_leadership))) +
+  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
   scale_fill_manual(values=c("#69b3a2", "#404080")) +
-  labs(fill="")
+  labs(fill="Party leadership", x = "Eigencentrality")
 
-# Frames
-eigens_legCovs %>%
-  ggplot( aes(x=eigen_value, fill=as.factor(party_leadership))) +
-  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity') +
+# Committee leadership
+dat %>%
+  filter(!is.na(committee_leadership)) %>% 
+  ggplot( aes(x=eigen_100, fill=as.factor(committee_leadership))) +
+  geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
   scale_fill_manual(values=c("#69b3a2", "#404080")) +
-  labs(fill="")
+  labs(fill="Committee leadership", x = "Eigencentrality")
+
+# Relationship with NOMINATE and centrality - null results
+dat %>% 
+  filter(party_code == 100) %>% 
+  ggplot() +
+  geom_point(aes(x = nominate_dim2, y = eigen_100), color = "blue") +
+  geom_smooth(aes(x = nominate_dim2, y = eigen_100))
+
+
 
 ##################################
 # Look at scatterplots to see if anything stands out as highly correlated (continuous)
@@ -775,84 +826,6 @@ ggplot(data = topics_df.R) +
 
 
 
-#######################################################
-# Clean up variables for regression
-#######################################################
-
-
-
-# # Filter to numeric, and features that make sense
-# # Remove variables that were problematic for regression
-# # Details on removed variables:
-#   # 1. Cook_PVI: Tried to turn it into numerical (D below 0; R above), but I only
-#     # have data for 116 congress, so it's pointless
-#   # 2. Next elections: Tried to turn it into a years-til election number, but the
-#     # only numbers were 0 and 2, so I turned it into an election_year dummy
-#     # however, it did not work in the regression
-#   # 3. Switched party: also did not work; potentially because there are very few
-# simple_lm_features <-
-#   eigens_legData %>% 
-#   select(-c(cook_pvi, next_election, switched_party))
-# 
-# ###
-# # Mutate variables to be more suitable for regression (factors, simplifying)
-# ###
-# 
-# # Leadership role - split into Speaker and Leadership_other factors
-# simple_lm_features2 <-
-#   simple_lm_features %>% 
-#   mutate(speaker = ifelse(leadership_role == "Speaker of the House", 1, 0)
-#          , speaker = ifelse(is.na(speaker) == TRUE, 0, speaker)
-#          , leadership_other = ifelse(leadership_role %in% c(
-#            "Republican Caucus Chariman"
-#            , "House Minority Leader"
-#            , "Republican Whip"
-#            , "House Majority Leader"
-#          ), 1, 0)
-#          ) %>% 
-#   select(-leadership_role) %>% 
-#   mutate(speaker = as.factor(speaker)
-#          , leadership_other = as.factor(leadership_other))
-# 
-# # gender - change to factor
-# simple_lm_features3 <-
-#   simple_lm_features2 %>% 
-#   mutate(female = ifelse(gender == "F", 1, 0)) %>% 
-#   mutate(female = as.factor(female)) %>% 
-#   select(-gender)
-# 
-# 
-# # Remove faction memberships that are all zeros (no Republicans)
-# no_repub_factions <- c("jd_member", "cpc_member", "pop_member", 
-#                        "ndc_member", "bdc_member")
-# 
-# simple_lm_features4 <-
-#   simple_lm_features3 %>% 
-#   select(-any_of(no_repub_factions))
-# 
-# 
-# # convert memberships to factors
-# simple_lm_features5 <-
-#   simple_lm_features4 %>% 
-#   mutate(across(contains("_member"), as.factor))
-# 
-# # Scale IVs
-# dat_simple_lm <-
-#   simple_lm_features5 %>% 
-#   mutate(across(where(is.numeric), scale))
-# 
-# 
-# mod1 <- lm(eigen_value ~ 
-#              bills_cosponsored +
-#              bills_sponsored +
-#              dw_nominate +
-#              votes_with_party_pct +
-#              female +
-#              speaker +
-#              leadership_other
-#            , data = dat_simple_lm)
-# 
-# summary(mod1)
 
 
 
