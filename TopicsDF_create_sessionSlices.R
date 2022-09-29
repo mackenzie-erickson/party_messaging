@@ -14,7 +14,7 @@ rm(list = ls())
 # Packages
 packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
               "stringr", "stm", "quanteda",
-              "texreg", "knitr", "kableExtra")
+              "texreg", "knitr", "kableExtra", "data.table")
 
 # Load packages
 lapply(packages, require, character.only = TRUE)
