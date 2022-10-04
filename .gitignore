@@ -5,3 +5,6 @@
 .Rdata
 .httr-oauth
 .DS_Store
+
+# my files
+party_messaging.Rproj
