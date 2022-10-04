@@ -7,7 +7,7 @@
   # get in cascade format, and fit diffusion network
 
 
-##############################
+###############################
 
 rm(list = ls())
 
@@ -227,8 +227,49 @@ politSalient.D <- first.obs.D %>%
 
 
 
+##########
+# Prepare data for cascades that are topic-session (so that there is more info for the netinf)
+#########
+
+# Create congress_session var (e.g. 115_1)
+first.obs.R <- first.obs.R %>% 
+  mutate(congress_session = ifelse( congress == 113 & sessionStartDate == ymd("2013-01-03"), "113_1",
+                                    ifelse(congress == 113 & sessionStartDate == ymd("2014-01-03"), "113_2",
+                                           ifelse(congress == 114 & sessionStartDate == ymd("2015-01-06"), "114_1",
+                                                  ifelse(congress == 114 & sessionStartDate == ymd("2016-01-04"), "114_2",
+                                                         ifelse(congress == 115 & sessionStartDate == ymd("2017-01-03"), "115_1",
+                                                                ifelse(congress == 115 & sessionStartDate == ymd("2018-01-03"), "115_2",
+                                                                       ifelse(congress == 116 & sessionStartDate == ymd("2019-01-03"), "116_1",
+                                                                              ifelse(congress == 116 & sessionStartDate == ymd("2020-01-03"), "116_2",
+                                                                                     NA)))))))
+  ))
+
+first.obs.D <- first.obs.D %>% 
+  mutate(congress_session = ifelse( congress == 113 & sessionStartDate == ymd("2013-01-03"), "113_1",
+                                    ifelse(congress == 113 & sessionStartDate == ymd("2014-01-03"), "113_2",
+                                           ifelse(congress == 114 & sessionStartDate == ymd("2015-01-06"), "114_1",
+                                                  ifelse(congress == 114 & sessionStartDate == ymd("2016-01-04"), "114_2",
+                                                         ifelse(congress == 115 & sessionStartDate == ymd("2017-01-03"), "115_1",
+                                                                ifelse(congress == 115 & sessionStartDate == ymd("2018-01-03"), "115_2",
+                                                                       ifelse(congress == 116 & sessionStartDate == ymd("2019-01-03"), "116_1",
+                                                                              ifelse(congress == 116 & sessionStartDate == ymd("2020-01-03"), "116_2",
+                                                                                     NA)))))))
+  ))
+
+
 ###
-# Estimate networks - Function
+# Create topic_session var (e.g. 28_115_1)
+###
+first.obs.R <- first.obs.R %>% 
+  mutate(topic_session = paste(topic, congress_session, sep = "_"))
+
+first.obs.D <- first.obs.D %>% 
+  mutate(topic_session = paste(topic, congress_session, sep = "_"))
+
+
+
+###
+# Estimate networks - Function - Old (making multiple networks)
 ###
 
 estimateNetwork_outputEigens.fns <- function(first.obs){
