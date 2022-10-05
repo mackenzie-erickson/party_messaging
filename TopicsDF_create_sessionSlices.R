@@ -8,8 +8,6 @@
 
 
 ################################
-#########
-########
 
 rm(list = ls())
 
@@ -267,6 +265,229 @@ first.obs.R <- first.obs.R %>%
 
 first.obs.D <- first.obs.D %>% 
   mutate(topic_session = paste(topic, congress_session, sep = "_"))
+
+
+###
+# Estimate networks - Function - New (each topic_session is a cascade in a single inferred network)
+###
+
+# Make cascades - Function
+cascades.funs <- function(dat)
+{
+  session.cascades <- 
+    as_cascade_long(
+      data = dat
+      , cascade_node_name = 'member_id'
+      , event_time = 'date_pr'
+      , cascade_id = 'topic_session'
+    )
+}  
+
+##
+# Make cascades - Apply function
+##
+
+# All topics
+d_cascades_allTopics <- cascades.funs(first.obs.D)
+r_cascades_allTopics <- cascades.funs(first.obs.R)
+
+# Politically-salient topics
+d_cascades_Salient <- cascades.funs(filter(first.obs.D, salient == 1))
+r_cascades_Salient <- cascades.funs(filter(first.obs.R, salient == 1))
+
+# Descriptive summaries - TO INSERT INTO APPENDIX
+for (i in list(d_cascades_allTopics, r_cascades_allTopics, d_cascades_Salient, r_cascades_Salient)){summary(i)}
+
+
+######
+# Plot cascade segments (not rec'd to plot more than 20)
+######
+
+# INSERT: Do some interesting cascades (look in TopicModelsEval or online for how to filter)
+
+
+
+
+##########################
+
+###
+# Estimate networks - function
+###
+
+netinf.funs <- function(cascades){
+  result <- netinf(
+    cascades = cascades
+    , trans_mod = "exponential"
+    , p_value_cutoff = 0.1
+  )
+}
+
+###
+# Estimate networks - apply function
+###
+set.seed(999)
+d_net_Salient <- netinf.funs(d_cascades_Salient)
+
+
+
+###############
+# Reverse edge direction for pagerank
+##############
+
+# Pull out nodes
+nodes.d <- sort(unique(c(d_net_Salient$origin_node, d_net_Salient$destination_node)))
+
+
+########
+# Create edgelists
+########
+# Create indexed relationship between origin node and the destination node
+# (in a unique list of node names, if the first nodes is connected to the 20th node, then it would be [1, 20])
+edge_list_NORMAL_d <- as.matrix(cbind(
+  match(d_net_Salient$origin_node, nodes.d),
+  match(d_net_Salient$destination_node, nodes.d)))
+
+# Now reverse it
+# Edge list of ["origin", "destination"]
+edge_list_REVERSE_d <- as.matrix(cbind(
+  match(d_net_Salient$destination_node, nodes.d),
+  match(d_net_Salient$origin_node, nodes.d)))
+
+######
+# Graph it
+######
+
+# Turn the 'normal' edgelist into a graph
+g_NORMAL_d <- graph_from_edgelist(edge_list_NORMAL_d)
+
+# Turn the 'reversed' edgelist into a graph
+g_REVERSE_d <- graph_from_edgelist(edge_list_REVERSE_d)
+
+#######
+# Pagerank
+#######
+
+# Calculate pagerank ('normal')
+pagerank_NORMAL <- page_rank(g_NORMAL_d)
+# Calculate pagerank ('reverse')
+pagerank_REVERSE <- page_rank(g_REVERSE_d)
+
+# Look at correlation - corr = 0.08
+plot(
+  pagerank_NORMAL$vector,
+  pagerank_REVERSE$vector)
+
+
+
+# let's compare to in- and out-degree
+degree_data_d <- 
+  merge(
+    as.data.table(edge_list_REVERSE_d)[, .N, V1][, .(V = V1, destination_degree = N)],
+    as.data.table(edge_list_REVERSE_d)[, .N, V2][, .(V = V2, origin_degree = N)],
+    by = "V", all = TRUE
+  )
+
+# Add pagerank_REVERSE to dt
+degree_data_d[, pagerank_REVERSE := pagerank_REVERSE$vector]
+# Add pagerank_NORMAL
+degree_data_d[, pagerank_NORMAL := pagerank_NORMAL$vector]
+# Calculate diff in pagerank between REVERSE - NORMAL
+degree_data_d[, diff := pagerank_REVERSE - pagerank_NORMAL]
+
+
+###
+# Identify (not) influential nodes ("V")
+###
+
+# Very influential node (influential sender, not influential receiver)
+degree_data_d[which.max(diff)]
+# Not influential node (they receive way more than they send)
+degree_data_d[which.min(diff)]
+
+# Influential - center of sending, regardless of receiving
+degree_data_d[which.max(pagerank_REVERSE)]
+
+
+########
+# TEMP - add on member features
+########
+
+# Merge with member_id
+degree_data_d <- cbind(nodes.d, degree_data_d)
+
+# Merge with leg covs
+degree_data_d_vars <- 
+  left_join(
+    degree_data_d
+    , covariates.df.D
+    , by = c("nodes.d" = "member_id")
+  ) %>%
+  as.data.frame() %>% 
+  rename(member_id = nodes.d)
+
+mod <- lm(diff ~ )
+
+plot(degree_data_d_vars$diff
+     , degree_data_d_vars$bills_sponsored)
+
+##
+# Cor mat - Search for variables
+##
+num_vars <- degree_data_d_vars %>% select(where(is.numeric)) %>% as.matrix()
+cor(num_vars, use = "pairwise.complete.obs")
+
+
+
+boxplot(filter(degree_data_d_vars, party_leadership == 1)$pagerank_REVERSE,
+        filter(degree_data_d_vars, party_leadership == 0)$pagerank_REVERSE)
+
+ggplot() +
+  geom_boxplot(data = filter(degree_data_d_vars, party_leadership == 1),
+               aes(diff)) +
+  geom_boxplot(data = filter(degree_data_d_vars, party_leadership == 0),
+               aes(diff))
+
+ggplot() +
+  geom_boxplot(data = degree_data_d_vars,
+               aes(diff, fill = as.factor(!is.na(party_leadership))), position = "dodge") +
+  scale_fill_discrete(name = "Party leadership", ) +
+  labs(y = "", x = "Influence score") +
+  theme_minimal()
+
+sd(filter(degree_data_d_vars, party_leadership == 0)$diff)
+
+t.test(filter(degree_data_d_vars, party_leadership == 1)$diff, 
+       filter(degree_data_d_vars, party_leadership == 0)$diff)
+
+
+####################################################
+# DESCRIPTIVE STATS - Appendix
+####################################################
+
+# Set up all variables 
+vars0 <- with(degree_data_d_vars, data.frame(
+  "PageRank" = pagerank_REVERSE))
++ "Transplantation" = factor(jasa$transplant, levels = 0:1, labels =
+                               + c("no", "yes")), "Age" = jasa$age, "Surgery" = factor(jasa$surgery,
+                                                                                       + levels = 0:1, labels = c("no", "yes")), "Survival status" =
+  + factor(jasa$fustat, levels = 0:1, labels = c("alive", "dead")),
++ "HLA A2 score" = jasa$hla.a2, "Birthday" = jasa$birth.dt,
+Kaspar Rufibach 3
++ "Acceptance into program" = jasa$accept.dt, "End of follow up" =
+  + jasa$fu.date, "Follow up time" = futime, "Mismatch score" =
+  + mscore, check.names = FALSE))
+R> attach(vars0, warn.conflicts = FALSE)
+
+vars1 <- vars0[, c("Surgery", "Survival status", "HLA A2 score")]
+cap1 <- "Patient characteristics: nominal variables."
+tableNominal(vars = vars1, cap = cap1, vertical = FALSE, lab =
+               + "tab: nominal1", longtable = FALSE)
+
+
+
+
+
+
 
 
 
