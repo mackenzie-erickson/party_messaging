@@ -1,2 +1,2 @@
 # party_messaging
-Scripts for party messaging articl
+Scripts for party messaging chapters.
