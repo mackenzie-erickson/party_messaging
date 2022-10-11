@@ -227,6 +227,14 @@ politSalient.D <- first.obs.D %>%
 
 
 
+##############################################################################
+##############################################################################
+# Network Version 1: One network/score inferred from multiple sessions
+##############################################################################
+##############################################################################
+
+
+
 ##########
 # Prepare data for cascades that are topic-session (so that there is more info for the netinf)
 #########
@@ -425,7 +433,6 @@ degree_data_d_vars <-
   as.data.frame() %>% 
   rename(member_id = nodes.d)
 
-mod <- lm(diff ~ )
 
 plot(degree_data_d_vars$diff
      , degree_data_d_vars$bills_sponsored)
@@ -488,82 +495,105 @@ tableNominal(vars = vars1, cap = cap1, vertical = FALSE, lab =
 
 
 
-
+##############################################################################
+##############################################################################
+# Network Version 2: 4 networks/multiple scores inferred from 4 separate congresses
+##############################################################################
+##############################################################################
 
 
 ###
 # Estimate networks - Function - Old (making multiple networks)
 ###
 
-estimateNetwork_outputEigens.fns <- function(first.obs){
+# Temp: Testing
+
+estimateNetwork_outputScore.fns <- function(first.obs){
   
   results_list <- vector(mode = "list")
   
-  for (i in unique(first.obs$sessionStartDate)) {
+  for (i in unique(first.obs$congress)) {
     
     # Filter dataset
-     session.df <- 
+     congress.df <- 
        first.obs %>% 
-       filter(sessionStartDate == i)
+       filter(congress == i)
      
      # Create cascades
-     session.cascade <-
+     congress.cascade <-
        as_cascade_long(
-         data = session.df
+         data = congress.df
          , cascade_node_name = 'member_id'
          , event_time = 'date_pr'
          , cascade_id = 'topic'
        )
      
      # Estimate network
-     session.netinf.result <- netinf(
-       cascades = session.cascade
+     congress.netinf.result <- netinf(
+       cascades = congress.cascade
        , trans_mod = "exponential"
        , p_value_cutoff = 0.1
      )
      
-     # Convert graph to igraph format (directed ties)
-     session.graph <- 
-       session.netinf.result %>% 
-       select(origin_node, destination_node) %>% 
-       graph_from_data_frame(directed = TRUE)
+
+     ######
+     #  Calculate Pagerank
+     ######
      
-     # Eigenvector centrality
-     session.eiegens <- eigen_centrality(
-       graph = session.graph
-       , directed = TRUE
-       , scale = TRUE
-       , weights = NULL
+     # Pull out nodes
+     nodes <- sort(unique(c(congress.netinf.result$origin_node, congress.netinf.result$destination_node)))
+     
+     
+     # Create reversed edgelist
+
+        # Create indexed relationship between destination node and the origin node
+        # (in a unique list of node names, if the first nodes is connected to the 20th node, then it would be [1, 20])
+        # Edge list of ["origin", "destination"]
+     edge_list_REVERSE <- as.matrix(cbind(
+       match(congress.netinf.result$destination_node, nodes),
+       match(congress.netinf.result$origin_node, nodes)))
+     
+     # Create "normal" edgelist
+     edge_list_NORMAL <- as.matrix(cbind(
+       match(congress.netinf.result$origin_node, nodes),
+       match(congress.netinf.result$destination_node, nodes)))
+     
+     # Turn the edgelists back into graphs
+     g_REVERSE <- graph_from_edgelist(edge_list_REVERSE)
+     g_NORMAL <- graph_from_edgelist(edge_list_NORMAL)
+     
+     #######
+     # Pagerank
+     #######
+     
+     # Calculate pagerank ('normal')
+     pagerank_NORMAL <- page_rank(g_NORMAL)$vector
+     # Calculate pagerank ('reverse')
+     pagerank_REVERSE <- page_rank(g_REVERSE)$vector
+     
+     
+     # Create table
+
+     # DF of nodes and their index
+     nodes_withIndex <- data.frame(
+       member_id = nodes
+       , indx = 1:length(nodes)
      )
-     session.eigens <- data.frame(member_id = names(session.eiegens$vector)
-                                    , eigen = unname(session.eiegens$vector))
      
-     # Out-degree
-     session.outdegree <- degree(graph = session.graph
-                                 , mode = "out"
-                                 , normalized = TRUE
-                                 )
-     session.outdegree <- data.frame(member_id = names(session.outdegree)
-                                     , out_degree = unname(session.outdegree))
+     # Add pagerank info
+     pagerank.df <- cbind(
+       nodes_withIndex
+       , pagerank_REVERSE
+       , pagerank_NORMAL
+     ) %>% 
+       mutate(pagerank_DIFF = pagerank_REVERSE - pagerank_NORMAL)
      
+     # Add congress
+     pagerank.df <-
+       pagerank.df %>% 
+       mutate(congress = i)
      
-     #  Pagerank
-     session.pagerank <- page_rank(graph = session.graph
-                                   , algo = "prpack"
-                                   , directed = TRUE)
-     session.pagerank <- data.frame(member_id = names(session.pagerank$vector)
-                                    , pagerank = unname(session.pagerank$vector))
-     
-     # Centrality DF
-     centrality.df <- 
-       session.eigens %>% 
-       full_join(session.outdegree, by = "member_id") %>% 
-       full_join(session.pagerank, by = "member_id") %>% 
-       mutate(sessionStartDate = i) 
-     centrality.df <- centrality.df %>% 
-       mutate(sessionStartDate = as.Date(sessionStartDate, origin = "1970-01-01"))
-     
-     results_list[[length(results_list) + 1]] <- centrality.df
+     results_list[[length(results_list) + 1]] <- pagerank.df
      
   }
   return(results_list)
@@ -574,27 +604,27 @@ estimateNetwork_outputEigens.fns <- function(first.obs){
 # Apply networks and centrality function
 ###
 set.seed(1776)
-centrality.list.R <- estimateNetwork_outputEigens.fns(first.obs.R)
-centrality.list.D <- estimateNetwork_outputEigens.fns(first.obs.D)
+score_congressNet.list.R <- estimateNetwork_outputScore.fns(first.obs.R)
+score_congressNet.list.D <- estimateNetwork_outputScore.fns(first.obs.D)
   
 
 # Flatten to df
-centrality.df.R <-  setNames(u <- do.call(rbind, centrality.list.R), nm = names(centrality.list.R[[1]]))
-centrality.df.D <-  setNames(u <- do.call(rbind, centrality.list.D), nm = names(centrality.list.D[[1]]))
+score_congressNet.df.R <-  setNames(u <- do.call(rbind, score_congressNet.list.R), nm = names(score_congressNet.list.R[[1]]))
+score_congressNet.df.D <-  setNames(u <- do.call(rbind, score_congressNet.list.D), nm = names(score_congressNet.list.D[[1]]))
 
 ###############################################################
 
-# Add in congress covariate; add in number of press releases; join with centrality df
+# Add in congress covariates; add in number of press releases; join with centrality df
 
 ###
 # Number PRs - Function
 ###
 
-numPR.fns <- function(topics.df, first.obs, centrality.df) {
+numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
   # Number the PRs (total)
   numPR_total <-
     topics.df %>% 
-    group_by(member_id, sessionStartDate) %>% 
+    group_by(member_id, congress) %>% 
     count() %>% 
     rename(numPR_total = n) 
   
@@ -605,7 +635,7 @@ numPR.fns <- function(topics.df, first.obs, centrality.df) {
   # Number of PRs (first.obs)
   numPR_firstObs <- 
     first.obs %>% 
-    group_by(member_id, sessionStartDate) %>% 
+    group_by(member_id, congress) %>% 
     count() %>% 
     rename(numPR_firstobs = n)
   
@@ -616,27 +646,22 @@ numPR.fns <- function(topics.df, first.obs, centrality.df) {
   # Merge together
   numPR.df <-
     full_join(numPR_total, numPR_firstObs
-              , by = c("member_id", "sessionStartDate"))
-  
-  # Add congress variable
-  numPR.df <-
-    left_join(numPR.df, distinct(select(first.obs, member_id, sessionStartDate, congress))
-              , by = c("member_id", "sessionStartDate"))
+              , by = c("member_id", "congress"))
   
   
-  # Merge onto centrality.df
-  new.centrality.df <- 
-    left_join(centrality.df, numPR.df
-              , by = c("member_id", "sessionStartDate")) 
+  # Merge onto score.df
+  new.score.df <- 
+    left_join(score_congressNet.df, numPR.df
+              , by = c("member_id", "congress")) 
   
-  return(new.centrality.df)
+  return(new.score.df)
 }
 
 ###
 # Apply function
 ###
-new.centrality.df.R <- numPR.fns(topics_df.R, first.obs.R, centrality.df.R)
-new.centrality.df.D <- numPR.fns(topics_df.D, first.obs.D, centrality.df.D)
+new.score.df.R <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.R)
+new.score.df.D <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.D)
 
 
 
@@ -740,19 +765,19 @@ covariates.df.D <- propubVars.fun(out.D, leg_covs)
 
 
 ####
-# Merge centrality.df with covariates.df
+# Merge score.df with covariates.df
 ####
 
-centrality_legCovs.R <-
+scoreCongressNets_legCovs.R <-
   left_join(
-    new.centrality.df.R
+    new.score.df.R
     , covariates.df.R,
     by = c("member_id", "congress")
   )
 
-centrality_legCovs.D <-
+scoreCongressNets_legCovs.D <-
   left_join(
-    new.centrality.df.D
+    new.score.df.D
     , covariates.df.D
     , by = c("member_id", "congress")
   )
@@ -762,7 +787,9 @@ centrality_legCovs.D <-
 # Merge Democrats and Republicans togther
 ###
 
-dat <- rbind(centrality_legCovs.D, centrality_legCovs.R)
+dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
+
+dat_congressNets 
 
 
 
