@@ -789,45 +789,21 @@ scoreCongressNets_legCovs.D <-
 
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
 
-dat_congressNets 
+
+
+
+# Visualizing if there's correlation over time
+dat_congressNets %>% 
+  filter(member_id %in% sample(dat_congressNets$member_id, 10)) %>% 
+  ggplot() + 
+  geom_point(aes(x = congress, y = pagerank_REVERSE, color = member_id), position = "dodge")
+
+
 
 
 
 ##########################################################################
 # VALIDATION:
-
-###
-# Panel correlation (test-retest validity)
-###
-
-
-###
-# Calculate Intra-cluster correlation
-###
-
-
-# Shape into wide format with each eigenscore at time, t as a column
-dat.wide <- reshape2::dcast(dat
-                            , member_id ~ sessionStartDate
-                            , value.var = "eigen")[,-1]
-
-# Calculate intra cluster correlation
-psych::ICC(dat.wide, missing = FALSE, alpha = 0.05, lmer = TRUE, check.keys = FALSE)
-
-# Calculate Pearson correlations
-eigen.cors <- cor(dat.wide, use = "pairwise.complete.obs")
-  
-# Plot ICC
-BlandAltmanLeh::bland.altman.plot(dat.wide$`2014-01-03`, dat.wide$`2020-01-03`
-                                  , main = "Test-retest", xlab = "means", ylab = "differences")
-
-
-
-###
-# Plot correlation
-###
-ggplot() +
-  geom_histogram(aes(x = eigen.cors))
 
 
 
@@ -844,81 +820,56 @@ ggplot() +
 ###########################################################
 
 
+# Transform score to make more readable (multiple by 100)
+dat_congressNets <-
+  dat_congressNets %>% 
+  mutate(pr_100 = pagerank_REVERSE * 100
+         , prDiff_100 = pagerank_DIFF * 100)
 
-####### STOPPED HERE - Start here
-
-
-# Transform eigen value to make more readable (multiple by 100)
-dat <-
-  dat %>% 
-  mutate(eigen_100 = eigen * 100)
+# Filter to just Dems and Repubs (remove one independent)
+dat_congressNets <- filter(dat_congressNets, party_code %in% c(100, 200))
 
 
 ####
 # Models
 ####
 
-# Main variables (nominate, leadership, gender, race)
-modT.mainCovs <- lm(
-  eigen_100 ~
-    
-    as.factor(party_leadership)
-  + as.factor(committee_leadership)
-  + scale_seniority
-  + scale_leslag
-  + nominate_dim1
-  + as.factor(woman)
-  + as.factor(white)
-  
-  , data = dat
-)
+# Prepare variables
 
-summary(modT.mainCovs)
+# Set up all variables 
+vars0 <- with(dat_congressNets
+              , data.frame(
+                "PageRank" = pr_100
+                , "PageRank diff" = prDiff_100
+                , "Congress" = congress
+                , "Press release count" = numPR_total
+                , "Bills sponsored" = bills_sponsored
+                , "Bills cosponsored" = bills_cosponsored
+                , "Pct. votes with party" = votes_with_party_pct
+                , "Caucus member" = factor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
+                , "Speeches daily" = n_speeches_daily
+                , "Party" = factor(party_code, levels = c(100, 200), labels = c("Democrat", "Republican"))
+                , "NOMINATE Dim 1" = nominate_dim1
+                , "NOMINATE Dim 2" = nominate_dim2
+                , "Senioriy" = seniority
+                , "Gender" = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
+                , "White" = factor(white, levels = 0:1, labels = c("No", "Yes"))
+                , "Majority" = factor(majority_party, levels = 0:1, labels = c("No", "Yes"))
+                , "Party leadership" = factor(party_leadership, levels = 0:1, labels = c("No", "Yes"))
+                , "Committee leadership" = factor(committee_leadership, levels = 0:1, labels = c("No", "Yes"))
+                , "LES" = les
+                , "Unopposed" = factor(unopposed, levels = 0:1, labels = c("No", "Yes"))
+                ))
+                
 
-# Main vars + more identity variables
-modT.addIdentity <- lm(
-  eigen_100 ~
-    
-    as.factor(party_leadership)
-  + as.factor(committee_leadership)
-  + scale_seniority
-  + scale_leslag
-  + nominate_dim1
-  + as.factor(poc_woman)
-  + as.factor(poc_man)
-  + as.factor(majority_party)
-  + as.factor(unopposed)
-  + proximity_to_floor_centroid
-  + as.factor(caucus_member)
+mod_congressNet <-
+  lm(PageRank.diff ~ .
+     , data = select(vars0, -c(PageRank, Press.release.count)))
 
-  , data = dat
-)
+summary(mod_congressNet)
 
-summary(modT.addIdentity)
 
-# Main vars + more behavioral vars
-modT.addBehavioral <- lm(
-  eigen_100 ~
-    
-    as.factor(party_leadership)
-  + as.factor(committee_leadership)
-  + scale_seniority
-  + scale_leslag
-  + nominate_dim1
-  + nominate_dim2
-  + as.factor(woman)
-  + as.factor(white)
-  + scale_votepct
-  + scale_speeches_daily
-  + scale_benchratiolag
-  + scale_bills_sponsored
-  + scale_bills_cosponsored
-  + scale_votes_with_party_pct
-  
-  , data = dat
-)
 
-summary(modT.addBehavioral)
 
 # Outlier removal
     # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
