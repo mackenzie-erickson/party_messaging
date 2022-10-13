@@ -701,7 +701,7 @@ dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs
 
 # Distribution of pagerank scores
 ggplot(dat_congressNets) +
-  geom_histogram(aes(log(pagerank_REVERSE, base = 5)), bins = 50) +
+  geom_boxplot(aes(pagerank_REVERSE)) +
   theme_minimal() +
   labs(x = "PageRank score") +
   ggtitle("Distribution of PageRank scores")
@@ -717,8 +717,8 @@ ggplot(dat_congressNets) +
 ggplot(dat_congressNets) +
   geom_boxplot(aes(eigen)) +
   theme_minimal() +
-  labs(x = "Eigenvector Ce") +
-  ggtitle("Distribution of Relative PageRank scores")
+  labs(x = "Eigenvector Centrality") +
+  ggtitle("Distribution of Eigenvector Centrality")
 
 
 ###########################################################################
@@ -737,9 +737,9 @@ ggplot(dat_congressNets) +
 # Transform score to make more readable (multiple by 100)
 dat_congressNets <-
   dat_congressNets %>% 
-  mutate(pr_100 = pagerank_REVERSE * 100
-         , prDiff_100 = pagerank_DIFF * 100
-         , eigen_100 = eigen * 100)
+  mutate(pr_100 = pagerank_REVERSE * 1000
+         , prDiff_100 = pagerank_DIFF * 1000
+         , eigen_100 = eigen * 1000)
 
 # Filter to just Dems and Repubs (remove one independent)
 dat_congressNets <- filter(dat_congressNets, party_code %in% c(100, 200))
@@ -814,10 +814,11 @@ Party.leadership
 + Majority
 + Party
 
-plm_fixed3 <- plm(PageRank.diff ~ 
+# Simpler version of PageRank with random individual fixed effects
+plm.pr1 <- plm(PageRank ~ 
                     Party.leadership 
                  + Committee.leadership 
-                 # + Senioriy 
+                 # + Senioriy
                  + NOMINATE.Dim.1 
                  + NOMINATE.Dim.2 
                  + LES
@@ -830,50 +831,175 @@ plm_fixed3 <- plm(PageRank.diff ~
                  # + Press.release.count
                  + Speeches.daily
                  + Unopposed
-                 # + Majority
+                 + Majority
                  + Party
-                 , data = vars0.pdf
-                 , model = "within"
+                 , data = vars0
+                 , effect = "individual"
+                 , model = "random"
                  , index = c("member_id", "Congress"))
 
-summary(plm_fixed1)
-summary(plm_fixed2)
-summary(plm_fixed3)
-summary(plm_fixed4)
+# PageRank with all controls with random individual fixed effects
+plm.pr2 <- plm(PageRank ~ 
+                 Party.leadership 
+               + Committee.leadership 
+               + Senioriy
+               + NOMINATE.Dim.1 
+               + NOMINATE.Dim.2 
+               + LES
+               + White 
+               + Bills.sponsored 
+               + Bills.cosponsored 
+               + Pct..votes.with.party
+               + Caucus.member
+               + Gender 
+               + Press.release.count
+               + Speeches.daily
+               + Unopposed
+               + Majority
+               + Party
+               , data = vars0
+               , effect = "individual"
+               , model = "random"
+               , index = c("member_id", "Congress"))
+
+# Simpler version of Relative PageRank with random individual fixed effects
+plm.prRelative1 <- plm(PageRank.diff ~ 
+                 Party.leadership 
+               + Committee.leadership 
+               # + Senioriy
+               + NOMINATE.Dim.1 
+               + NOMINATE.Dim.2 
+               + LES
+               + White 
+               + Bills.sponsored 
+               + Bills.cosponsored 
+               + Pct..votes.with.party
+               + Caucus.member
+               + Gender 
+               # + Press.release.count
+               + Speeches.daily
+               + Unopposed
+               + Majority
+               + Party
+               , data = vars0
+               , effect = "individual"
+               , model = "random"
+               , index = c("member_id", "Congress"))
+
+# Relative PageRank with all controls with random individual fixed effects
+plm.prRelative2 <- plm(PageRank.diff ~ 
+                 Party.leadership 
+               + Committee.leadership 
+               + Senioriy
+               + NOMINATE.Dim.1 
+               + NOMINATE.Dim.2 
+               + LES
+               + White 
+               + Bills.sponsored 
+               + Bills.cosponsored 
+               + Pct..votes.with.party
+               + Caucus.member
+               + Gender 
+               + Press.release.count
+               + Speeches.daily
+               + Unopposed
+               + Majority
+               + Party
+               , data = vars0
+               , effect = "individual"
+               , model = "random"
+               , index = c("member_id", "Congress"))
+
+# Simpler version of EigenCentrality with random individual fixed effects
+plm.eigen1 <- plm(Eigencentrality ~ 
+                         Party.leadership 
+                       + Committee.leadership 
+                       # + Senioriy
+                       + NOMINATE.Dim.1 
+                       + NOMINATE.Dim.2 
+                       + LES
+                       + White 
+                       + Bills.sponsored 
+                       + Bills.cosponsored 
+                       + Pct..votes.with.party
+                       + Caucus.member
+                       + Gender 
+                       # + Press.release.count
+                       + Speeches.daily
+                       + Unopposed
+                       + Majority
+                       + Party
+                       , data = vars0
+                       , effect = "individual"
+                       , model = "random"
+                       , index = c("member_id", "Congress"))
+
+# Eigencentrality with all controls with random individual fixed effects
+plm.eigen2 <- plm(Eigencentrality ~ 
+                         Party.leadership 
+                       + Committee.leadership 
+                       + Senioriy
+                       + NOMINATE.Dim.1 
+                       + NOMINATE.Dim.2 
+                       + LES
+                       + White 
+                       + Bills.sponsored 
+                       + Bills.cosponsored 
+                       + Pct..votes.with.party
+                       + Caucus.member
+                       + Gender 
+                       + Press.release.count
+                       + Speeches.daily
+                       + Unopposed
+                       + Majority
+                       + Party
+                       , data = vars0
+                       , effect = "individual"
+                       , model = "random"
+                       , index = c("member_id", "Congress"))
+
+
+summary(plm.pr1)
+summary(plm.pr2)
+
 
 
 #####################
 # Create LaTeX table
-texreg(l = list(modT.mainCovs, modT.addIdentity, modT.addBehavioral, modT.addBehavioral.outlierRemoved)
+texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
        
-       , custom.model.names = c("Model 1", "Model 2 (Identity)", "Model 3 (Behavioral)", "Model 4 (Behavioral)$^1$"),
-       custom.coef.map = list("as.factor(party_leadership)1" = "Party leadership"
-                              , "as.factor(committee_leadership)1" = "Committee leadership"
-                              , "scale_seniority" = "Seniority"
-                              , "scale_leslag" = "Lagged LES"
-                              , "nominate_dim1" = "Nominate dim 1"
-                              , "as.factor(woman)1" = "Woman"
-                              , "as.factor(white)1" = "White"
-                              , "as.factor(poc_woman)1" = "POC woman"
-                              , "as.factor(poc_man)1" = "POC man"
-                              , "as.factor(majority_party)1 " = "Majority party"
-                              , "as.factor(unopposed)1" = "Unopposed"
-                              , "proximity_to_floor_centroid" = "Proximity to floor"
-                              , "as.factor(caucus_member)1" = "Caucus member"
-                              , "nominate_dim2" = "Nominate dim 2"
-                              , "scale_votepct" = "Vote Pct."
-                              , "scale_speeches_daily" = "Daily speech number"
-                              , "scale_benchratiolag " = "Lagged benchmark ratio"
-                              , "scale_bills_sponsored" = "Num. bills sponsored"
-                              , "scale_bills_cosponsored" = "Num. bills cosponsored"
-                              , "scale_votes_with_party_pct" = "Votes with party pct."
-       ),
-       custom.note = ("\\parbox{0.7\\linewidth}{\\vspace{2pt}%stars. \\\\
-       $^1$Brian Fitzpatrick (R-PA) removed to eliminate an extreme outlier.
-       He cosponsored 1267 bills in the 116th congress, while the next highest
-       was Walter Jones (R-NC) at 614. The average is 207 cosponsored bills per congress.}"),
-       caption = "Linear models regressed on centrality",
-       caption.above = TRUE)
+       , custom.model.names = c("PageRank", "Relative PageRank", "Eigencentrality"),
+       custom.coef.map = list(
+         "Party.leadershipYes" = "Party leadership"
+         , "Committee.leadershipYes" = "Committee leadership"         
+         , "Senioriy" = "Seniority"         
+         , "NOMINATE.Dim.1" = "NOMINATE Dim1"
+         , "NOMINATE.Dim.2" = "NOMINATE Dim2"                    
+         , "LES" = "LES"               
+         , "WhiteYes" = "White"        
+         , "Bills.sponsored" = "Bills sponsored"      
+         , "Bills.cosponsored" = "Bills cosponsored"
+         , "Pct..votes.with.party" = "Votes w/ party pct."       
+         , "Caucus.memberYes" = "Caucus member"           
+         , "GenderFemale"  = "Female"   
+         , "Press.release.count" = "Press release count"         
+         , "Speeches.daily" = "Speeches daily"
+         , "UnopposedYes" = "Unopposed"            
+         , "MajorityYes" = "Majority"        
+         , "PartyRepublican" = "Republican"
+       )
+       , bold = 0.5
+       , stars = numeric(0)
+       # , custom.note = "Table shows the effect of member characteristics on their
+       # likelihood to be central to their party. All models include individual random effects
+       # to account for unobserved features such as a member's proclivity to discuss press releases with colleagues."
+       , caption = "Linear Models of Member Influence Scores"
+       , caption.above = TRUE
+       , fontsize = "small"
+       , custom.gof.rows = list("Random effects" = c("YES", "YES", "YES"))
+       , float.pos = "h"
+       )
+
 
 
 
