@@ -199,14 +199,14 @@ topics_df.D <-
             by = c("topic", "topic_label"))
 
 ###
-# Filter to first obs per session - Function
+# Filter to first obs per congress - Function
 ###
 first.obs.fun <- function(topics.df){
   first.obs <-
     topics.df %>% 
-    group_by(sessionStartDate, topic, member_id) %>% 
+    group_by(congress, topic, member_id) %>% 
     arrange(date_pr, .by_group = TRUE) %>% 
-    distinct(member_id, topic, sessionStartDate, .keep_all = TRUE) %>% 
+    distinct(member_id, topic, congress, .keep_all = TRUE) %>% 
     ungroup()
 }
 
@@ -353,13 +353,11 @@ d_net_Salient <- netinf.funs(d_cascades_Salient)
 ##############################################################################
 ##############################################################################
 
-# Tmp
-first.obs <- first.obs.R
-i <- 115
 
 ###
 # Estimate networks - Function - Separate nets for each congress
 ###
+
 
 estimateNetwork_outputScore.fns <- function(first.obs){
   
@@ -371,6 +369,12 @@ estimateNetwork_outputScore.fns <- function(first.obs){
      congress.df <- 
        first.obs %>% 
        filter(congress == i)
+     
+     
+     # Arrange
+     congress.df <-
+       congress.df %>% 
+       arrange(topic, member_id)
      
      # Create cascades
      congress.cascade <-
@@ -485,11 +489,28 @@ estimateNetwork_outputScore.fns <- function(first.obs){
 set.seed(1776)
 score_congressNet.list.R <- estimateNetwork_outputScore.fns(first.obs.R)
 score_congressNet.list.D <- estimateNetwork_outputScore.fns(first.obs.D)
-  
 
-# Flatten to df
-score_congressNet.df.R <-  setNames(u <- do.call(rbind, score_congressNet.list.R), nm = names(score_congressNet.list.R[[1]]))
-score_congressNet.df.D <-  setNames(u <- do.call(rbind, score_congressNet.list.D), nm = names(score_congressNet.list.D[[1]]))
+###
+# Flatten to dfs
+###
+
+# Dems
+score_congressNet.df.D <- bind_rows(
+  score_congressNet.list.D[[1]],
+  score_congressNet.list.D[[2]],
+  score_congressNet.list.D[[3]],
+  score_congressNet.list.D[[4]],
+)
+
+# Repubs
+score_congressNet.df.R <- bind_rows(
+  score_congressNet.list.R[[1]],
+  score_congressNet.list.R[[2]],
+  score_congressNet.list.R[[3]],
+  score_congressNet.list.R[[4]],
+)
+
+
 
 ###############################################################
 
