@@ -14,7 +14,7 @@ rm(list = ls())
 # Packages
 packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
               "stringr", "stm", "quanteda",
-              "texreg", "knitr", "kableExtra", "data.table")
+              "texreg", "knitr", "kableExtra", "data.table", "plm")
 
 # Load packages
 lapply(packages, require, character.only = TRUE)
@@ -217,6 +217,12 @@ first.obs.R <- first.obs.fun(topics_df.R)
 first.obs.D <- first.obs.fun(topics_df.D)
 
 
+# Jeff Van Drew switched from Dem to Repub during 116th congress, so he was
+# included in both party's networks. 
+# Remove Dem observation
+first.obs.D <- first.obs.D %>% filter(member_id != "V000133")
+
+
 ###
 # Filter to politically-salient topics
 ###
@@ -338,160 +344,6 @@ d_net_Salient <- netinf.funs(d_cascades_Salient)
 
 
 
-###############
-# Reverse edge direction for pagerank
-##############
-
-# Pull out nodes
-nodes.d <- sort(unique(c(d_net_Salient$origin_node, d_net_Salient$destination_node)))
-
-
-########
-# Create edgelists
-########
-# Create indexed relationship between origin node and the destination node
-# (in a unique list of node names, if the first nodes is connected to the 20th node, then it would be [1, 20])
-edge_list_NORMAL_d <- as.matrix(cbind(
-  match(d_net_Salient$origin_node, nodes.d),
-  match(d_net_Salient$destination_node, nodes.d)))
-
-# Now reverse it
-# Edge list of ["origin", "destination"]
-edge_list_REVERSE_d <- as.matrix(cbind(
-  match(d_net_Salient$destination_node, nodes.d),
-  match(d_net_Salient$origin_node, nodes.d)))
-
-######
-# Graph it
-######
-
-# Turn the 'normal' edgelist into a graph
-g_NORMAL_d <- graph_from_edgelist(edge_list_NORMAL_d)
-
-# Turn the 'reversed' edgelist into a graph
-g_REVERSE_d <- graph_from_edgelist(edge_list_REVERSE_d)
-
-#######
-# Pagerank
-#######
-
-# Calculate pagerank ('normal')
-pagerank_NORMAL <- page_rank(g_NORMAL_d)
-# Calculate pagerank ('reverse')
-pagerank_REVERSE <- page_rank(g_REVERSE_d)
-
-# Look at correlation - corr = 0.08
-plot(
-  pagerank_NORMAL$vector,
-  pagerank_REVERSE$vector)
-
-
-
-# let's compare to in- and out-degree
-degree_data_d <- 
-  merge(
-    as.data.table(edge_list_REVERSE_d)[, .N, V1][, .(V = V1, destination_degree = N)],
-    as.data.table(edge_list_REVERSE_d)[, .N, V2][, .(V = V2, origin_degree = N)],
-    by = "V", all = TRUE
-  )
-
-# Add pagerank_REVERSE to dt
-degree_data_d[, pagerank_REVERSE := pagerank_REVERSE$vector]
-# Add pagerank_NORMAL
-degree_data_d[, pagerank_NORMAL := pagerank_NORMAL$vector]
-# Calculate diff in pagerank between REVERSE - NORMAL
-degree_data_d[, diff := pagerank_REVERSE - pagerank_NORMAL]
-
-
-###
-# Identify (not) influential nodes ("V")
-###
-
-# Very influential node (influential sender, not influential receiver)
-degree_data_d[which.max(diff)]
-# Not influential node (they receive way more than they send)
-degree_data_d[which.min(diff)]
-
-# Influential - center of sending, regardless of receiving
-degree_data_d[which.max(pagerank_REVERSE)]
-
-
-########
-# TEMP - add on member features
-########
-
-# Merge with member_id
-degree_data_d <- cbind(nodes.d, degree_data_d)
-
-# Merge with leg covs
-degree_data_d_vars <- 
-  left_join(
-    degree_data_d
-    , covariates.df.D
-    , by = c("nodes.d" = "member_id")
-  ) %>%
-  as.data.frame() %>% 
-  rename(member_id = nodes.d)
-
-
-plot(degree_data_d_vars$diff
-     , degree_data_d_vars$bills_sponsored)
-
-##
-# Cor mat - Search for variables
-##
-num_vars <- degree_data_d_vars %>% select(where(is.numeric)) %>% as.matrix()
-cor(num_vars, use = "pairwise.complete.obs")
-
-
-
-boxplot(filter(degree_data_d_vars, party_leadership == 1)$pagerank_REVERSE,
-        filter(degree_data_d_vars, party_leadership == 0)$pagerank_REVERSE)
-
-ggplot() +
-  geom_boxplot(data = filter(degree_data_d_vars, party_leadership == 1),
-               aes(diff)) +
-  geom_boxplot(data = filter(degree_data_d_vars, party_leadership == 0),
-               aes(diff))
-
-ggplot() +
-  geom_boxplot(data = degree_data_d_vars,
-               aes(diff, fill = as.factor(!is.na(party_leadership))), position = "dodge") +
-  scale_fill_discrete(name = "Party leadership", ) +
-  labs(y = "", x = "Influence score") +
-  theme_minimal()
-
-sd(filter(degree_data_d_vars, party_leadership == 0)$diff)
-
-t.test(filter(degree_data_d_vars, party_leadership == 1)$diff, 
-       filter(degree_data_d_vars, party_leadership == 0)$diff)
-
-
-####################################################
-# DESCRIPTIVE STATS - Appendix
-####################################################
-
-# Set up all variables 
-vars0 <- with(degree_data_d_vars, data.frame(
-  "PageRank" = pagerank_REVERSE))
-+ "Transplantation" = factor(jasa$transplant, levels = 0:1, labels =
-                               + c("no", "yes")), "Age" = jasa$age, "Surgery" = factor(jasa$surgery,
-                                                                                       + levels = 0:1, labels = c("no", "yes")), "Survival status" =
-  + factor(jasa$fustat, levels = 0:1, labels = c("alive", "dead")),
-+ "HLA A2 score" = jasa$hla.a2, "Birthday" = jasa$birth.dt,
-Kaspar Rufibach 3
-+ "Acceptance into program" = jasa$accept.dt, "End of follow up" =
-  + jasa$fu.date, "Follow up time" = futime, "Mismatch score" =
-  + mscore, check.names = FALSE))
-R> attach(vars0, warn.conflicts = FALSE)
-
-vars1 <- vars0[, c("Surgery", "Survival status", "HLA A2 score")]
-cap1 <- "Patient characteristics: nominal variables."
-tableNominal(vars = vars1, cap = cap1, vertical = FALSE, lab =
-               + "tab: nominal1", longtable = FALSE)
-
-
-
 
 
 
@@ -501,12 +353,13 @@ tableNominal(vars = vars1, cap = cap1, vertical = FALSE, lab =
 ##############################################################################
 ##############################################################################
 
+# Tmp
+first.obs <- first.obs.R
+i <- 115
 
 ###
-# Estimate networks - Function - Old (making multiple networks)
+# Estimate networks - Function - Separate nets for each congress
 ###
-
-# Temp: Testing
 
 estimateNetwork_outputScore.fns <- function(first.obs){
   
@@ -535,7 +388,28 @@ estimateNetwork_outputScore.fns <- function(first.obs){
        , p_value_cutoff = 0.1
      )
      
+     ######
+     #  Calculate Eigenvector centrality
+     ######
+     
+     # Convert graph to igraph format (directed ties)
+     igraph <-
+       congress.netinf.result %>%
+       select(origin_node, destination_node) %>%
+       graph_from_data_frame(directed = TRUE)
 
+     # Eigenvector centrality
+     eigens <- eigen_centrality(
+       graph = igraph
+       , directed = TRUE
+       , scale = TRUE
+       , weights = NULL
+     )
+    
+     # Make eigen df
+     eigens.df <- data.frame(member_id = names(eigens$vector)
+                                  , eigen = unname(eigens$vector))
+     
      ######
      #  Calculate Pagerank
      ######
@@ -581,19 +455,24 @@ estimateNetwork_outputScore.fns <- function(first.obs){
      )
      
      # Add pagerank info
-     pagerank.df <- cbind(
+     score.df <- cbind(
        nodes_withIndex
        , pagerank_REVERSE
        , pagerank_NORMAL
      ) %>% 
        mutate(pagerank_DIFF = pagerank_REVERSE - pagerank_NORMAL)
      
+     # Add eigenvector centrality info
+     score.df <- score.df %>% 
+       left_join(., eigens.df, by = "member_id")
+     
+     
      # Add congress
-     pagerank.df <-
-       pagerank.df %>% 
+     score.df <-
+       score.df %>% 
        mutate(congress = i)
      
-     results_list[[length(results_list) + 1]] <- pagerank.df
+     results_list[[length(results_list) + 1]] <- score.df
      
   }
   return(results_list)
@@ -784,7 +663,7 @@ scoreCongressNets_legCovs.D <-
 
 
 ###
-# Merge Democrats and Republicans togther
+# Merge Democrats and Republicans together
 ###
 
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
@@ -792,19 +671,33 @@ dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs
 
 
 
-# Visualizing if there's correlation over time
-dat_congressNets %>% 
-  filter(member_id %in% sample(dat_congressNets$member_id, 10)) %>% 
-  ggplot() + 
-  geom_point(aes(x = congress, y = pagerank_REVERSE, color = member_id), position = "dodge")
-
-
-
-
 
 ##########################################################################
-# VALIDATION:
 
+####################################################
+# DESCRIPTIVE STATS - Appendix
+####################################################
+
+# Distribution of pagerank scores
+ggplot(dat_congressNets) +
+  geom_histogram(aes(log(pagerank_REVERSE, base = 5)), bins = 50) +
+  theme_minimal() +
+  labs(x = "PageRank score") +
+  ggtitle("Distribution of PageRank scores")
+
+# Distribution of relative pagerank scores
+ggplot(dat_congressNets) +
+  geom_boxplot(aes(pagerank_DIFF)) +
+  theme_minimal() +
+  labs(x = "Relative PageRank score") +
+  ggtitle("Distribution of Relative PageRank scores")
+
+# Distribution of eigencentrality scores
+ggplot(dat_congressNets) +
+  geom_boxplot(aes(eigen)) +
+  theme_minimal() +
+  labs(x = "Eigenvector Ce") +
+  ggtitle("Distribution of Relative PageRank scores")
 
 
 ###########################################################################
@@ -824,7 +717,8 @@ dat_congressNets %>%
 dat_congressNets <-
   dat_congressNets %>% 
   mutate(pr_100 = pagerank_REVERSE * 100
-         , prDiff_100 = pagerank_DIFF * 100)
+         , prDiff_100 = pagerank_DIFF * 100
+         , eigen_100 = eigen * 100)
 
 # Filter to just Dems and Repubs (remove one independent)
 dat_congressNets <- filter(dat_congressNets, party_code %in% c(100, 200))
@@ -841,6 +735,8 @@ vars0 <- with(dat_congressNets
               , data.frame(
                 "PageRank" = pr_100
                 , "PageRank diff" = prDiff_100
+                , "Eigencentrality" = eigen_100
+                , "member_id" = member_id
                 , "Congress" = congress
                 , "Press release count" = numPR_total
                 , "Bills sponsored" = bills_sponsored
@@ -864,45 +760,65 @@ vars0 <- with(dat_congressNets
 
 mod_congressNet <-
   lm(PageRank.diff ~ .
-     , data = select(vars0, -c(PageRank, Press.release.count)))
+     , data = select(vars0, -c(PageRank, Press.release.count, member_id)))
 
 summary(mod_congressNet)
 
 
+######
+# Panel data models
+######
 
 
-# Outlier removal
-    # Behavioral mod again, but remove Brian Fitzpatrick (R-PA) ("F000466")
-    # He is an outlier because he legitimately cosponsored 1267 bills in 116th congress
-      # When the average is 207, and the next highest is 614
-modT.addBehavioral.outlierRemoved <- lm(
-  eigen_100 ~
-    
-    as.factor(party_leadership)
-  + as.factor(committee_leadership)
-  + scale_seniority
-  + scale_leslag
-  + nominate_dim1
-  + nominate_dim2
-  + as.factor(woman)
-  + as.factor(white)
-  + scale_votepct
-  + scale_speeches_daily
-  + scale_benchratiolag
-  + scale_bills_sponsored
-  + scale_bills_cosponsored
-  + scale_votes_with_party_pct
-  
-  , data = filter(dat, member_id != "F000466")
-)
 
+# Make pdata.frame
+vars0.pdf <- pdata.frame(vars0
+                         , index = c("member_id", "Congress"))
 
-summary(modT.mainCovs)
-summary(modT.addIdentity)
-summary(modT.addBehavioral)
-summary(modT.addBehavioral.outlierRemoved)
+Party.leadership 
++ Committee.leadership 
++ Senioriy 
++ NOMINATE.Dim.1 
++ NOMINATE.Dim.2 
++ LES
++ White 
++ Bills.sponsored 
++ Bills.cosponsored 
++ Pct..votes.with.party
++ Caucus.member
++ Gender 
++ Press.release.count
++ Speeches.daily
++ Unopposed
++ Majority
++ Party
 
-### TO DO: Need to add fixed effects for party
+plm_fixed3 <- plm(PageRank.diff ~ 
+                    Party.leadership 
+                 + Committee.leadership 
+                 # + Senioriy 
+                 + NOMINATE.Dim.1 
+                 + NOMINATE.Dim.2 
+                 + LES
+                 + White 
+                 + Bills.sponsored 
+                 + Bills.cosponsored 
+                 + Pct..votes.with.party
+                 + Caucus.member
+                 + Gender 
+                 # + Press.release.count
+                 + Speeches.daily
+                 + Unopposed
+                 # + Majority
+                 + Party
+                 , data = vars0.pdf
+                 , model = "within"
+                 , index = c("member_id", "Congress"))
+
+summary(plm_fixed1)
+summary(plm_fixed2)
+summary(plm_fixed3)
+summary(plm_fixed4)
 
 
 #####################
