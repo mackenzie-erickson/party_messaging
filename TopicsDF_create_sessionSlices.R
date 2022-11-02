@@ -14,7 +14,9 @@ rm(list = ls())
 # Packages
 packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
               "stringr", "stm", "quanteda",
-              "texreg", "knitr", "kableExtra", "data.table", "plm")
+              "texreg", "knitr", "kableExtra"
+              # , "data.table"
+              , "plm")
 
 # Load packages
 lapply(packages, require, character.only = TRUE)
@@ -943,12 +945,12 @@ first.obs.R <- readRDS(paste0(getwd(), "/Data/output/firstobs_R_Nov11"))
 ###
 
 # Create cascade mini function
-createCascade.minifns <- function(first.obs, congress){
+createCascade.minifns <- function(first.obs, congressNum){
   
   # Filter dataset
   congress.df <- 
     first.obs %>% 
-    filter(congress == congress)
+    filter(congress == congressNum)
   
   # Arrange
   congress.df <-
@@ -1015,25 +1017,69 @@ D116.network <- createNetworks.minifns(D116.cascades)
 ###
 # Plot: Improvements (gain in model fit) from each added edge
 ###
+library(cowplot)
+library(grid)
+library(gridExtra)
+library(egg)
 
 # Create plot objects
-impD113.pl <- plot(D113.network, type = "improvement") + ggtitle("D113")
-impD114.pl <- plot(D114.network, type = "improvement") + ggtitle("D114")
-impD115.pl <- plot(D115.network, type = "improvement") + ggtitle("D115")
-impD116.pl <- plot(D116.network, type = "improvement") + ggtitle("D116")
+# impD113.pl <- plot(D113.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impD114.pl <- plot(D114.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impD115.pl <- plot(D115.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impD116.pl <- plot(D116.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# 
+# impR113.pl <- plot(R113.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impR114.pl <- plot(R114.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impR115.pl <- plot(R115.network, type = "improvement") + theme(axis.title = element_blank() , plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
+# impR116.pl <- plot(R116.network, type = "improvement") + theme(axis.title = element_blank() , plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
 
-impR113.pl <- plot(R113.network, type = "improvement") + ggtitle("R113")
-impR114.pl <- plot(R114.network, type = "improvement") + ggtitle("R114")
-impR115.pl <- plot(R115.network, type = "improvement") + ggtitle("R115")
-impR116.pl <- plot(R116.network, type = "improvement") + ggtitle("R116")
+impD113.pl <- plot(D113.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "113th Congress")
+impD114.pl <- plot(D114.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "114th Congress")
+impD115.pl <- plot(D115.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "115th Congress")
+impD116.pl <- plot(D116.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "116th Congress")
+
+impR113.pl <- plot(R113.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "R113 ")
+impR114.pl <- plot(R114.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+impR115.pl <- plot(R115.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+impR116.pl <- plot(R116.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "R116 ")
+
+
 
 # Arrange in a grid
-cowplot::plot_grid(impD113.pl, impD114.pl, impD115.pl, impD116.pl,
-                   impR113.pl, impR114.pl, impR115.pl, impR116.pl
-                   , ncol = 2
-                   )
+#  imp.cowplot <- 
+  # cowplot::plot_grid(impD113.pl, impR113.pl
+  #                  , impD114.pl, impR114.pl
+  #                  , impD115.pl, impR115.pl
+  #                  , impD116.pl,impR116.pl
+  #                  , ncol = 2
+  #                  # , labels = c("113th Congress", "", "114th Congress", "", "115th Congress", "", "116th Congress", "")
+  #                  # , label_fontface = "plain"
+  #                  , align = "hv"
+  #                  )
 
+# Create common xy axes ("improvement" and "edge number") and a master axis for "Dem"/"Repub"
 
+# Master y axis
+y.grobImprovement <- textGrob("Improvement", rot = 90)
+
+# Master x axis
+x.grobEdgeNum <- textGrob("Edge Number")
+
+# Super axis - party
+x.grobParty <- textGrob("Democrats                                  Republicans"
+                        , gp = gpar(fontsize = 15, fontface = "bold"))
+
+# congress.grob113 <- textGrob("113th Congress")
+
+# Arrange together
+# grid.arrange(arrangeGrob(imp.cowplot, left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
+
+grid.arrange(arrangeGrob(impD113.pl, impR113.pl
+                         , impD114.pl, impR114.pl
+                         , impD115.pl, impR115.pl
+                         , impD116.pl,impR116.pl
+                         , ncol = 2
+                         , left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
 
 
 
