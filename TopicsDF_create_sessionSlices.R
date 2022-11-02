@@ -38,7 +38,7 @@ committee.raw <- readRDS(paste0(getwd(), "/Data/Legislator_info/committee-data-f
 # Press releases - Republican House
 ##############################
 
-# Read in 46 topic models that were run on July 14 after removing state and member names
+# Read in 30 topic models that were run on July 14 after removing state and member names
 
 # STM-format processed data (trimmed/stemmed)
 out.R <- readRDS(paste0(getwd(), "/Data/output/noNames/2022-07-14_stmPrepped_houseR.rds"))
@@ -281,69 +281,6 @@ first.obs.D <- first.obs.D %>%
   mutate(topic_session = paste(topic, congress_session, sep = "_"))
 
 
-###
-# Estimate networks - Function - New (each topic_session is a cascade in a single inferred network)
-###
-
-# Make cascades - Function
-cascades.funs <- function(dat)
-{
-  session.cascades <- 
-    as_cascade_long(
-      data = dat
-      , cascade_node_name = 'member_id'
-      , event_time = 'date_pr'
-      , cascade_id = 'topic_session'
-    )
-}  
-
-##
-# Make cascades - Apply function
-##
-
-# All topics
-d_cascades_allTopics <- cascades.funs(first.obs.D)
-r_cascades_allTopics <- cascades.funs(first.obs.R)
-
-# Politically-salient topics
-d_cascades_Salient <- cascades.funs(filter(first.obs.D, salient == 1))
-r_cascades_Salient <- cascades.funs(filter(first.obs.R, salient == 1))
-
-# Descriptive summaries - TO INSERT INTO APPENDIX
-for (i in list(d_cascades_allTopics, r_cascades_allTopics, d_cascades_Salient, r_cascades_Salient)){summary(i)}
-
-
-######
-# Plot cascade segments (not rec'd to plot more than 20)
-######
-
-# INSERT: Do some interesting cascades (look in TopicModelsEval or online for how to filter)
-
-
-
-
-##########################
-
-###
-# Estimate networks - function
-###
-
-netinf.funs <- function(cascades){
-  result <- netinf(
-    cascades = cascades
-    , trans_mod = "exponential"
-    , p_value_cutoff = 0.1
-  )
-}
-
-###
-# Estimate networks - apply function
-###
-set.seed(999)
-d_net_Salient <- netinf.funs(d_cascades_Salient)
-
-
-
 
 
 
@@ -358,7 +295,7 @@ d_net_Salient <- netinf.funs(d_cascades_Salient)
 # Estimate networks - Function - Separate nets for each congress
 ###
 
-
+  
 estimateNetwork_outputScore.fns <- function(first.obs){
   
   results_list <- vector(mode = "list")
@@ -779,11 +716,6 @@ vars0 <- with(dat_congressNets
                 ))
                 
 
-mod_congressNet <-
-  lm(PageRank.diff ~ .
-     , data = select(vars0, -c(PageRank, Press.release.count, member_id)))
-
-summary(mod_congressNet)
 
 
 ######
@@ -796,23 +728,7 @@ summary(mod_congressNet)
 vars0.pdf <- pdata.frame(vars0
                          , index = c("member_id", "Congress"))
 
-Party.leadership 
-+ Committee.leadership 
-+ Senioriy 
-+ NOMINATE.Dim.1 
-+ NOMINATE.Dim.2 
-+ LES
-+ White 
-+ Bills.sponsored 
-+ Bills.cosponsored 
-+ Pct..votes.with.party
-+ Caucus.member
-+ Gender 
-+ Press.release.count
-+ Speeches.daily
-+ Unopposed
-+ Majority
-+ Party
+
 
 # Simpler version of PageRank with random individual fixed effects
 plm.pr1 <- plm(PageRank ~ 
@@ -988,7 +904,7 @@ texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
          , "MajorityYes" = "Majority"        
          , "PartyRepublican" = "Republican"
        )
-       , bold = 0.5
+       , bold = 0.05
        , stars = numeric(0)
        # , custom.note = "Table shows the effect of member characteristics on their
        # likelihood to be central to their party. All models include individual random effects
@@ -999,6 +915,126 @@ texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
        , custom.gof.rows = list("Random effects" = c("YES", "YES", "YES"))
        , float.pos = "h"
        )
+
+
+
+
+
+
+###############################################################################
+###############################################################################
+# Network Figures
+###############################################################################
+###############################################################################
+
+# This section is using first.obs data
+# Here's a pre-run copy of it from Nov 11
+first.obs.D <- readRDS(paste0(getwd(), "/Data/output/firstobs_D_Nov11"))
+first.obs.R <- readRDS(paste0(getwd(), "/Data/output/firstobs_R_Nov11"))
+
+##############
+# Estimate party-congress networks using same seed as before
+# Prior function returned centrality stats
+# Now we need the actual network objects
+##############
+
+###
+# Create cascade objects and network objects
+###
+
+# Create cascade mini function
+createCascade.minifns <- function(first.obs, congress){
+  
+  # Filter dataset
+  congress.df <- 
+    first.obs %>% 
+    filter(congress == congress)
+  
+  # Arrange
+  congress.df <-
+    congress.df %>% 
+    arrange(topic, member_id)
+  
+  # Create cascades
+  congress.cascade <-
+    as_cascade_long(
+      data = congress.df
+      , cascade_node_name = 'member_id'
+      , event_time = 'date_pr'
+      , cascade_id = 'topic'
+    )
+  return(congress.cascade)
+}
+
+# Create networks mini function
+createNetworks.minifns <- function(congress.cascade){
+  
+  congress.netinf.result <- netinf(
+    cascades = congress.cascade
+    , trans_mod = "exponential"
+    , p_value_cutoff = 0.1
+  )
+  return(congress.netinf.result)
+}
+
+
+
+###
+# Apply functions - create cascade and network objects
+###
+
+# Cascades - Republicans
+R113.cascades <- createCascade.minifns(first.obs.R, 113)
+R114.cascades <- createCascade.minifns(first.obs.R, 114)
+R115.cascades <- createCascade.minifns(first.obs.R, 115)
+R116.cascades <- createCascade.minifns(first.obs.R, 116)
+
+# Cascades - Democrats
+D113.cascades <- createCascade.minifns(first.obs.D, 113)
+D114.cascades <- createCascade.minifns(first.obs.D, 114)
+D115.cascades <- createCascade.minifns(first.obs.D, 115)
+D116.cascades <- createCascade.minifns(first.obs.D, 116)
+
+
+set.seed(1776) # same seed as before
+
+# Networks - Republicans
+R113.network <- createNetworks.minifns(R113.cascades)
+R114.network <- createNetworks.minifns(R114.cascades)
+R115.network <- createNetworks.minifns(R115.cascades)
+R116.network <- createNetworks.minifns(R116.cascades)
+
+# Networks - Democrats
+D113.network <- createNetworks.minifns(D113.cascades)
+D114.network <- createNetworks.minifns(D114.cascades)
+D115.network <- createNetworks.minifns(D115.cascades)
+D116.network <- createNetworks.minifns(D116.cascades)
+
+
+
+###
+# Plot: Improvements (gain in model fit) from each added edge
+###
+
+# Create plot objects
+impD113.pl <- plot(D113.network, type = "improvement") + ggtitle("D113")
+impD114.pl <- plot(D114.network, type = "improvement") + ggtitle("D114")
+impD115.pl <- plot(D115.network, type = "improvement") + ggtitle("D115")
+impD116.pl <- plot(D116.network, type = "improvement") + ggtitle("D116")
+
+impR113.pl <- plot(R113.network, type = "improvement") + ggtitle("R113")
+impR114.pl <- plot(R114.network, type = "improvement") + ggtitle("R114")
+impR115.pl <- plot(R115.network, type = "improvement") + ggtitle("R115")
+impR116.pl <- plot(R116.network, type = "improvement") + ggtitle("R116")
+
+# Arrange in a grid
+cowplot::plot_grid(impD113.pl, impD114.pl, impD115.pl, impD116.pl,
+                   impR113.pl, impR114.pl, impR115.pl, impR116.pl
+                   , ncol = 2
+                   )
+
+
+
 
 
 
