@@ -13,9 +13,9 @@ rm(list = ls())
 
 # Packages
 packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
-              "stringr", "stm", "quanteda",
+              "stringr", "stm", "quanteda", 
               "texreg", "knitr", "kableExtra"
-              # , "data.table"
+              , "data.table"
               , "plm")
 
 # Load packages
@@ -629,7 +629,13 @@ scoreCongressNets_legCovs.D <-
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
 
 
+###
+# Make member names pretty for figure purposes
+###
+dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
 
+
+  
 
 
 ##########################################################################
@@ -682,6 +688,7 @@ dat_congressNets <-
 
 # Filter to just Dems and Repubs (remove one independent)
 dat_congressNets <- filter(dat_congressNets, party_code %in% c(100, 200))
+
 
 
 ####
@@ -1023,41 +1030,19 @@ library(gridExtra)
 library(egg)
 
 # Create plot objects
-# impD113.pl <- plot(D113.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impD114.pl <- plot(D114.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impD115.pl <- plot(D115.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impD116.pl <- plot(D116.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# 
-# impR113.pl <- plot(R113.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impR114.pl <- plot(R114.network, type = "improvement") + theme(axis.title = element_blank(), plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impR115.pl <- plot(R115.network, type = "improvement") + theme(axis.title = element_blank() , plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-# impR116.pl <- plot(R116.network, type = "improvement") + theme(axis.title = element_blank() , plot.margin = unit(c(0.65, 0, 0, 0), "cm"))
-
 impD113.pl <- plot(D113.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "113th Congress")
 impD114.pl <- plot(D114.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "114th Congress")
 impD115.pl <- plot(D115.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "115th Congress")
 impD116.pl <- plot(D116.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "116th Congress")
 
-impR113.pl <- plot(R113.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "R113 ")
+impR113.pl <- plot(R113.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
 impR114.pl <- plot(R114.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
 impR115.pl <- plot(R115.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
-impR116.pl <- plot(R116.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = "R116 ")
+impR116.pl <- plot(R116.network, type = "improvement") + theme(axis.title = element_blank()) + labs(subtitle = " ")
 
-
-
-# Arrange in a grid
-#  imp.cowplot <- 
-  # cowplot::plot_grid(impD113.pl, impR113.pl
-  #                  , impD114.pl, impR114.pl
-  #                  , impD115.pl, impR115.pl
-  #                  , impD116.pl,impR116.pl
-  #                  , ncol = 2
-  #                  # , labels = c("113th Congress", "", "114th Congress", "", "115th Congress", "", "116th Congress", "")
-  #                  # , label_fontface = "plain"
-  #                  , align = "hv"
-  #                  )
-
-# Create common xy axes ("improvement" and "edge number") and a master axis for "Dem"/"Repub"
+###
+# Create "master" axis grobs
+###
 
 # Master y axis
 y.grobImprovement <- textGrob("Improvement", rot = 90)
@@ -1067,27 +1052,153 @@ x.grobEdgeNum <- textGrob("Edge Number")
 
 # Super axis - party
 x.grobParty <- textGrob("Democrats                                  Republicans"
-                        , gp = gpar(fontsize = 15, fontface = "bold"))
+                        , gp = gpar(fontsize = 14, fontface = "bold"))
 
-# congress.grob113 <- textGrob("113th Congress")
-
-# Arrange together
-# grid.arrange(arrangeGrob(imp.cowplot, left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
-
+# Arrange axis grobs and plot objects
 grid.arrange(arrangeGrob(impD113.pl, impR113.pl
                          , impD114.pl, impR114.pl
                          , impD115.pl, impR115.pl
-                         , impD116.pl,impR116.pl
+                         , impD116.pl, impR116.pl
                          , ncol = 2
                          , left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
 
 
 
 
+###################################
+# Plot: p-value from the Vuong test associated with each edge addition
+###################################
+# Create plot objects
+vuongD113.pl <- plot(D113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "113th Congress")
+vuongD114.pl <- plot(D114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "114th Congress")
+vuongD115.pl <- plot(D115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "115th Congress")
+vuongD116.pl <- plot(D116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "116th Congress")
+
+vuongR113.pl <- plot(R113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+vuongR114.pl <- plot(R114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+vuongR115.pl <- plot(R115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+vuongR116.pl <- plot(R116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+
+###
+# Create "master" axis grobs
+###
+
+# Master y axis
+y.grobPValue <- textGrob("P-Value", rot = 90)
+
+# Master x axis
+x.grobEdgeNum <- textGrob("Edge Number")
+
+# Super axis - party
+x.grobParty <- textGrob("Democrats                                  Republicans"
+                        , gp = gpar(fontsize = 14, fontface = "bold"))
+
+# Arrange axis grobs and plot objects
+grid.arrange(arrangeGrob(vuongD113.pl, vuongR113.pl
+                         , vuongD114.pl, vuongR114.pl
+                         , vuongD115.pl, vuongR115.pl
+                         , vuongD116.pl, vuongR116.pl
+                         , ncol = 2
+                         , left = y.grobPValue, top = x.grobParty, bottom = x.grobEdgeNum))
+
+
+
+
+###################################################
+# Ego networks of most and least influential person
+##################################################
+
+###
+# Most/Least influential legislator, congress, and party
+###
+most_influential <- 
+  c(dat_congressNets[which.max(dat_congressNets$pagerank_REVERSE), ]$member_id
+  , dat_congressNets[which.max(dat_congressNets$pagerank_REVERSE), ]$party_code
+  , dat_congressNets[which.max(dat_congressNets$pagerank_REVERSE), ]$congress
+  , dat_congressNets[which.max(dat_congressNets$pagerank_REVERSE), ]$bioname)
+  
+
+least_influential <- 
+  c(dat_congressNets[which.min(dat_congressNets$pagerank_REVERSE), ]$member_id
+    , dat_congressNets[which.min(dat_congressNets$pagerank_REVERSE), ]$party_code
+    , dat_congressNets[which.min(dat_congressNets$pagerank_REVERSE), ]$congress
+    , dat_congressNets[which.min(dat_congressNets$pagerank_REVERSE), ]$bioname)
+
+###
+# Convert diffnet object to igraph
+###
+
+# Most influential: Bruce Westerman (R) in 114th congress
+R114.graph <- igraph::graph_from_data_frame(d = R114.network[, 1:2])
+# Least influential: Colin Allred (D) 116th congress
+D116.graph <- igraph::graph_from_data_frame(d = D116.network[, 1:2])
+
+
+# Get list of all ego networks in each congress, and induce them each into subgraphs
+R114.egoList <- lapply(ego(R114.graph), function(x) induced_subgraph(R114.graph, x))
+D116.egoList <- lapply(ego(D116.graph), function(x) induced_subgraph(D116.graph, x))
+
+# Index for min/max influential in their respective ego lists
+V(R114.graph)$name
+which(V(R114.graph)$name == most_influential[1])
+
+plot(R114.egoList[[3]])
+
+# This occurs when the vertex attribute list does not contain a name entry, 
+# but you can still set it using syntax of the form 
+# vertex_attr(g, "name") <- c("vector", "of", "names") 
+# optionally selecting a subset of vertices with the index argument, 
+# which defaults to index = V(graph).
+
+###
+# Pull out specific graphs
+###
+
+# Most influential
+
+
+component_distribution(R115.graph)
+is_connected(R115.graph)
+decompose(R115.graph, mode = "weak", min.vertices = 2)
+
+tmp <- igraph::make_ego_graph(R115.graph, nodes = c("D000619"))
+tmp2 <- induced_subgraph(R115.graph)
+plot(tmp)
+
+
+
+
+
+# Convert to graph
+D113.graph <- igraph::graph_from_data_frame(d = D114.network[, 1:2])
+
+
+
+##### TO DO Tuesday:
+# Make ego-net graphs! Just pick two and make them, and be done with it
+# You can always change them later, just do it and move on
+# Probably move on to descriptive graphs of who is most/least influential
+# Absolute pagerank - who has the most influence, regardless of if they are
+# also being influenced
+
 
 
 
 ########################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ##################################
