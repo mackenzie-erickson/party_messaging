@@ -25,7 +25,7 @@ lapply(packages, require, character.only = TRUE)
 setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Party_messaging")
 
 
-m#################
+#################
 # Load data and models
 #################
 
@@ -648,8 +648,8 @@ dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
 ggplot(dat_congressNets) +
   geom_boxplot(aes(pagerank_REVERSE)) +
   theme_minimal() +
-  labs(x = "PageRank score") +
-  ggtitle("Distribution of PageRank scores")
+  labs(x = "Reverse PageRank") +
+  ggtitle("Distribution of Influence Scores")
 
 # Distribution of relative pagerank scores
 ggplot(dat_congressNets) +
@@ -662,6 +662,269 @@ ggplot(dat_congressNets) +
 
 
 ###########################################################################
+###########################################################################
+# Chapter 3: Topics by Predictor (seniority, leadership)
+# We can see that leadership and seniority talks about different topics
+# than rank-and-file and freshman
+###########################################################################
+###########################################################################
+
+########################
+# Press release frequency by party - ch2
+########################
+
+# % of press releases by topic - R
+freq.R <- topics_df.R %>%
+  group_by(topicName) %>%
+  summarise(cnt = n()) %>%
+  mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+  arrange(desc(freq)) %>%
+  left_join(., topicNames.R
+            , by = c("topicName")) %>% 
+  filter(salient == 1) %>% 
+  select(topicName, freq)
+
+# % of press releases by topic - D
+freq.D <- topics_df.D %>%
+  group_by(topicName) %>%
+  summarise(cnt = n()) %>%
+  mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+  arrange(desc(freq)) %>%
+  left_join(., topicNames.D
+            , by = c("topicName")) %>% 
+  filter(salient == 1) %>% 
+  select(topicName, freq)
+
+# Full join
+freq.both <- 
+  full_join(freq.R, freq.D
+            , by = "topicName") %>% 
+  rename(freq.R = freq.x
+         , freq.D = freq.y)
+
+
+# Edit for figure
+freq.both.edit <-
+  freq.both %>% 
+  mutate(freq.D = 100 * freq.D
+         , freq.R = 100 * freq.R) %>% 
+  mutate(freq.D = as.numeric(paste0("-", freq.D)))
+
+# Pivot longer
+freq.both.long <-
+  pivot_longer(data = freq.both.edit
+               , cols = c("freq.R", "freq.D")
+               , names_to = "party"
+               , names_prefix = "freq."
+               , values_to = "freq")
+
+#####
+# Arranging for figure
+####
+
+# Descending order for Dems
+freq.both.long <-
+  freq.both.long %>% 
+  arrange(desc(freq), .by_group = TRUE)
+
+# Get names to set the limits - Democrats (ascending order b/c negative)
+dem.topic.limits <-
+  freq.both.long %>% 
+  filter(party == "D") %>% 
+  filter(!is.na(freq)) %>% 
+  arrange(freq) %>% 
+  select(topicName) %>% 
+  pull()
+
+# Additional republican topics that Dems don't talk about (also ascending order)
+party.topic.limits <-
+  c(dem.topic.limits
+    , "Law and order", "China", "Small business", "Public lands", "Human trafficking"
+    , "Executive power", "Higher edu.", "Veterans' affairs", "Energy")
+
+
+
+# Make party-topic figure
+ggplot(freq.both.long, aes(
+  y = factor(topicName)
+  , x = freq
+  , fill = factor(freq < 0)) # color dem and rep differently
+  ) +
+  geom_bar(stat = "identity", width = 0.8) +
+  geom_vline(xintercept = 0) +
+  theme_bw() +
+  xlab("Dem                                                           Rep") +
+  ylab("") +
+  scale_x_continuous(breaks = c(-6, -3, 0, 3, 6), 
+                     labels = paste0(c(6, 3, 0, 3, 6),"%")) +
+  scale_y_discrete(limits = rev(party.topic.limits)) +
+  scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red")) +
+  ggtitle("Democrats and Republicans diverge in topic focus")
+
+
+
+
+##################
+# Ch2: topic frequency by leadership role
+#################
+
+# Merge extra data that is already appended to the score df for regression
+topics_dfExtra.D <-
+  left_join(topics_df.D, scoreCongressNets_legCovs.D
+            , by = c("member_id", "congress"))
+
+topics_dfExtra.R <-
+  left_join(topics_df.R, scoreCongressNets_legCovs.R
+            , by = c("member_id", "congress"))
+
+
+# Create separate leadership/rank-and-file freqs
+
+leader.rankfile.freq.fns <- function(topics_dfExtra) {
+  
+  leadership <-
+    topics_dfExtra %>%
+    filter(party_leadership == 1) %>%
+    filter(salient == 1) %>%
+    group_by(topicName) %>%
+    summarise(cnt = n()) %>%
+    mutate(freq = round(cnt / sum(cnt), 3)
+           , party_leadership = 1) %>%
+    arrange(desc(freq)) %>%
+    select(topicName, freq, party_leadership)
+  
+  rankfile <-
+    topics_dfExtra %>%
+    filter(party_leadership == 0) %>%
+    filter(salient == 1) %>%
+    group_by(topicName) %>%
+    summarise(cnt = n()) %>%
+    mutate(freq = round(cnt / sum(cnt), 3)
+           , party_leadership = 0) %>%
+    arrange(desc(freq)) %>%
+    select(topicName, freq, party_leadership)
+  
+  # Join
+  leaderandrank <-
+    full_join(leadership, rankfile
+              , by = "topicName") %>% 
+    rename(freq.leader = freq.x
+           , freq.rank = freq.y)
+  
+  
+  # Pivot longer
+  freq.leaderrank.long <-
+    pivot_longer(data = leaderandrank
+                 , cols = c("freq.leader", "freq.rank")
+                 , names_to = "leadership"
+                 , names_prefix = "freq."
+                 , values_to = "freq") %>% 
+    select(-c(party_leadership.x, party_leadership.y))
+  
+  # Turn into pcts 
+  freq.leaderrank.long <-
+    freq.leaderrank.long %>% 
+    mutate(freq = 100 * freq)
+  
+  
+} # End leader.rankfile.freq.fns
+
+# Apply function
+freq.leaderrank.R <- leader.rankfile.freq.fns(topics_dfExtra.R) %>% mutate(party = "R")
+freq.leaderrank.D <- leader.rankfile.freq.fns(topics_dfExtra.D) %>% mutate(party = "D")
+
+# Merge together
+freq.leaderrank.all <- 
+  full_join(freq.leaderrank.R
+            , freq.leaderrank.D
+            , by = c("topicName", "leadership")) %>% 
+  rename(freq.R = freq.x
+         , freq.D = freq.y)
+
+# Turn Dem's into negative for now
+freq.leaderrank.all <-
+  freq.leaderrank.all %>% 
+  mutate(freq.D = as.numeric(paste0("-", freq.D)))
+
+# Pivot longer
+freq.leaderrank.long <-
+  freq.leaderrank.all %>% 
+  pivot_longer(cols = c("freq.R", "freq.D")
+               , names_to = "party"
+               , names_prefix = "freq."
+               , values_to = "freq") %>% 
+  select(-c(party.x, party.y))
+
+#############
+# Leadership vs rank-and-file Figure (both parties) - Make
+############
+
+leadershipFill <- with(freq.leaderrank.long
+                       , ifelse(party == "R" & leadership == "leader", "dark red"
+                       , ifelse(party == "D" & leadership == "leader", "dark blue"
+                       , "white")))
+
+# Unite leadership and party to create a new factor
+freq.leaderrank.long <-
+  tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE)
+
+ggplot(freq.leaderrank.long
+       , aes(y = factor(topicName)
+             , x = freq
+             , group = factor(leadership)
+             , fill = interaction(leadership, party, sep=":")
+             , color = interaction(leadership, party, sep=":"))) +
+  geom_bar(stat = "identity"
+           , width = 0.6
+           , position = position_dodge()
+           , color = "black") +
+  theme_bw() +
+  geom_vline(xintercept = 0)
+
+
+ggplot(freq.leaderrank.long
+       , aes(y = factor(topicName)
+             , x = freq
+             , fill = leadershipFill
+             # , fill = fct_rev(factor(leadership))
+             )) +
+  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "dark gray") +
+  geom_vline(xintercept = 0) +
+  theme_bw()
+  
+  
+  scale_fill_manual(values = c("dark gray", "white")
+                    , name = ""
+                    , labels = c("Leadership", "Rank-and-file")) +
+  # scale_fill_manual(values = c("TRUE" = "dark gray", "FALSE" = "white")) +
+  ylab("") +
+  xlab("Dem                                                           Rep") +
+  scale_x_continuous(breaks = c(-10, 0, 10), 
+                     labels = paste0(c(10, 0, 10),"%")) +
+  # geom_vline(xintercept = 0, color = "dark gray") +
+  ggtitle("Topic allocation varies between leadership and rank-and-file")
+
+
+
+# Make party-topic figure
+ggplot(freq.both.long, aes(
+  y = factor(topicName)
+  , x = freq
+  , fill = factor(freq < 0)) # color dem and rep differently
+) +
+  geom_bar(stat = "identity", width = 0.8) +
+  geom_vline(xintercept = 0) +
+  theme_bw() +
+  xlab("Dem                                                           Rep") +
+  ylab("") +
+  scale_x_continuous(breaks = c(-6, -3, 0, 3, 6), 
+                     labels = paste0(c(6, 3, 0, 3, 6),"%")) +
+  scale_y_discrete(limits = rev(party.topic.limits)) +
+  scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red")) +
+  ggtitle("Democrats and Republicans diverge in topic focus")
+
+
+
 
 
 
@@ -1279,63 +1542,21 @@ tkplot(
 # Look at bar charts to see if anything stands out as highly correlated (factors)
 
 # Party leadership
-dat %>%
+dat_congressNets %>%
   filter(!is.na(party_leadership)) %>% 
-  ggplot( aes(x=eigen_100, fill=as.factor(party_leadership))) +
+  ggplot( aes(x=pagerank_REVERSE, fill=as.factor(party_leadership))) +
   geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
   scale_fill_manual(values=c("#69b3a2", "#404080")) +
-  labs(fill="Party leadership", x = "Eigencentrality")
+  labs(fill="Party leadership", x = "PageRank")
 
 # Committee leadership
-dat %>%
+dat_congressNets %>%
   filter(!is.na(committee_leadership)) %>% 
-  ggplot( aes(x=eigen_100, fill=as.factor(committee_leadership))) +
+  ggplot( aes(x=pagerank_REVERSE, fill=as.factor(committee_leadership))) +
   geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
   scale_fill_manual(values=c("#69b3a2", "#404080")) +
-  labs(fill="Committee leadership", x = "Eigencentrality")
+  labs(fill="Committee leadership", x = "PageRank")
 
-# Relationship with NOMINATE and centrality - null results
-dat %>% 
-  filter(party_code == 100) %>% 
-  ggplot() +
-  geom_point(aes(x = nominate_dim2, y = eigen_100), color = "blue") +
-  geom_smooth(aes(x = nominate_dim2, y = eigen_100))
-
-
-
-##################################
-# Look at scatterplots to see if anything stands out as highly correlated (continuous)
-
-# Topics
-eigensTopics_legCovs %>% 
-  ggplot(aes(x = eigen_value, y = nominate_dim2)) +
-  geom_point(aes(fill = as.factor(republican)))
-
-
-
-
-
-
-# Regression table
-mod2 <- lm(
-  eigen_value_100 ~
-    proximity_to_floor_centroid_zero_code_missingness
-  + scale_leslag_zero_code_missingness
-  + scale_benchratiolag
-  + scale_votepct
-  + party_leadership
-  + committee_leadership
-  + unopposed
-  + majority_party
-  + nominate_dim1
-  + nominate_dim2
-  + scale_seniority
-  + woman
-  + white
-  , data = eigens_legCovs
-)
-
-summary(mod2)
 
 
 
@@ -1401,38 +1622,6 @@ ggplot(data = topics_df.R) +
 
 
 
-###############################################################
-# Figures, Tests
-# 1. Are eigens correlated for individuals across congresses? - Not really
-
-
-# Are eigens correlated for individuals across congresses?
-# Spread data into columns of members with rows being years (values being their different eigens)
-eigens_wide <- 
-  eigens_all %>%
-  spread(member_id, eigen_value) %>%
-  select(-congress) 
-
-# And then calculate the correlation
-eigenCors_acrossCongresses <- 
-  apply(eigens_wide, 2, function(x) {
-    cor(x, seq.int(nrow(eigens_wide)))
-  })
-
-# Turn into df
-eigenCors <- 
-  eigenCors_acrossCongresses %>% 
-  as.data.frame()
-names(eigenCors) <- "cors"
-
-
-# Plot histogram of absolute value of corrs
-ggplot(data = eigenCors) +
-  geom_histogram(aes(abs(cors)), bins= 21, fill = "white", color = "black") +
-  ggtitle("Correlation between Repub member's centrality across congresses"
-          , subtitle = "Centrality does not appear very correlated across congresses") +
-  labs(x = "abs(Correlation)", y = "") +
-  theme_minimal()
 
 
 # End Tests/Experiments Section
@@ -1447,232 +1636,232 @@ ggplot(data = eigenCors) +
 
 
 
-#################################################################
-#################################################################
-# SECTION 2: FRAMES
-#################################################################
-#################################################################
-
-# Description:
-
-# Within each topic, what is the second highest topic? 
-# Who is most central in a diffusion network of that frame?
-
-
-
-
-###################################################
-
-# Function: - Label each doc with topic and frame
-  # Repeat section 1 (label docs with most-prob topic)
-  # Add frame label (most-prob second topic per doc)
-  # Add topic/frame descriptions
-
-###################################################
-
-
-
-label_statement_topics.fns <- function(fit, out){
-
-  ########
-  # Add TOPIC label to each doc
-  ########
-  
-  # Make a data.table of topic proportions
-  topics_DT <- make.dt(fit, meta = out$meta)
-  
-  # Pivot longer so each doc is repeated 20 times
-  topics_long <- 
-    pivot_longer(
-      data = topics_DT,
-      cols = starts_with("Topic"),
-      names_to = "topic",
-      names_prefix = "Topic",
-      values_to = "topic_prob"
-    ) %>% 
-    as.data.frame()
-  
-  # Arrange by doc index, then desc(prob)
-  # So the highest probability observation is first
-  topics_long <- 
-    topics_long %>% 
-    group_by(indx) %>% 
-    arrange(desc(topic_prob), .by_group = TRUE) %>% 
-    ungroup()
-  
-  
-  # Create mainTopic.df
-  # (keep only the observation with the highest prob)
-  mainTopic.df <- 
-    topics_long %>% 
-    distinct(indx, .keep_all = TRUE)
-  
-  ########
-  # Add FRAME label to each doc
-  ########
-
-  # Get the remaining frames
-  remaining_frames <-
-    setdiff(topics_long, mainTopic.df) %>% 
-    group_by(indx) %>% 
-    arrange(desc(topic_prob), .by_group = TRUE) %>% 
-    ungroup()
-  
-  # Keep only the highest prob frame
-  mainFrame <-
-    remaining_frames %>% 
-    distinct(indx, .keep_all = TRUE)
-  
-  # Rename "frame" and "frame_prob" and only keep them and indx in simple df
-  mainFrame_simple <-
-    mainFrame %>% 
-    rename(frame = topic,
-           frame_prob = topic_prob) %>% 
-    select(indx, frame, frame_prob)
-  
-  
-  ########
-  # Merge TOPIC and FRAME dfs
-  ########
-  
-  # Merge frames onto main topic df
-  topicsFrames.df <- 
-    left_join(
-      mainTopic.df
-      , mainFrame_simple
-      , by = c("indx")
-    )
-
-  
-  ########
-  # Remove the incorrect caucus info
-  ########
-  
-  topicsFrames.df <-
-    topicsFrames.df %>% 
-    select(-c(contains("_leader"), contains("_titles"),
-              contains("_taskforces"), contains("_member")))
-  
-  
-  
-  ########
-  # Add topic labels onto data.frame
-  # To provide information about topics/frames
-  ########
-  
-
-  # Pull 7 and 4 word summaries (estimated by STM)
-  set.seed(5555)
-  # 7-word summary
-  fit.labels <- labelTopics(fit, 1:20, n = 7)
-  # 4-word summary
-  fit.labels_short <- labelTopics(fit, 1:20, n = 4) 
-  
-  
-  # Labels for TOPICS
-  # Topic # and short/long descriptions
-  topic_labels.df <- data.frame(topic = as.character(fit.labels$topicnums),
-                          topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
-                          topic_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
-  
-  # Labels for FRAMES
-  frame_labels.df <- data.frame(frame = as.character(fit.labels$topicnums),
-                                frame_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
-                                frame_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
-  
-  
-  ########
-  # Merge topic labels onto data
-  ########
-  topicsFrames.df <- 
-    topicsFrames.df %>% 
-    dtplyr::lazy_dt() %>% 
-    left_join(topic_labels.df, by = "topic") %>% 
-    as.data.frame()
-  
-  ########
-  # Merge frame labels onto data
-  ########
-  topicsFrames.df <- 
-    topicsFrames.df %>% 
-    dtplyr::lazy_dt() %>% 
-    left_join(frame_labels.df, by = "frame") %>% 
-    as.data.frame()
-  
-  
-} ##################################  End label_statement_topics.fns function
-
-
-
-
-
-###############
-# Apply topic label function
-##############
-set.seed(7777)
-topicsFrames.R <-
-  label_statement_topics.fns(
-    fit = fit.R,
-    out = out.R)
-
-# Remove 2021 press releases (there are only 8, compared to 20k for the others)
-topicsFrames.R <-
-  topicsFrames.R %>% 
-  filter(date_pr < ymd("2021-01-01"))
-
-
-# Table: Examples of Statement title, Topic, Frame
-# Pull random examples:
-sample_n(topicsFrames.R, 1) %>% select(title_pr, topic_label, frame_label)
-
-
-
-
-
-
-
-##########################################################
-# Most Common Frames
-# Make DF for diffusion network
-##########################################################
-
-
-# For each topic, what is the most common frame?
-mostCommonFrames.R <-
-  topicsFrames.R %>% 
-  group_by(topic) %>% 
-  count(frame) %>% 
-  summarize(frame = as.character(which.max(n))) 
-
-
-####
-# Pull the unique descriptions of topics/frames
-####
-
-# Topic descriptions
-topicDescs.df <-
-  topicsFrames.R %>% 
-  select(topic, topic_label, topic_label_short) %>% 
-  distinct()
-
-# Frame descriptions
-frameDescs.df <-
-  topicsFrames.R %>% 
-  select(frame, frame_label, frame_label_short) %>% 
-  distinct()
-  
-# Merge TOPIC descriptions onto table
-mostCommonFrames.R <-
-  mostCommonFrames.R %>% 
-  left_join(., topicDescs.df
-            , by = "topic"
-            )
-
-# Merge FRAME descriptions onto table
-mostCommonFrames.R <-
-  mostCommonFrames.R %>% 
-  left_join(., frameDescs.df,
-            by = "frame")
+# #################################################################
+# #################################################################
+# # SECTION 2: FRAMES
+# #################################################################
+# #################################################################
+# 
+# # Description:
+# 
+# # Within each topic, what is the second highest topic? 
+# # Who is most central in a diffusion network of that frame?
+# 
+# 
+# 
+# 
+# ###################################################
+# 
+# # Function: - Label each doc with topic and frame
+#   # Repeat section 1 (label docs with most-prob topic)
+#   # Add frame label (most-prob second topic per doc)
+#   # Add topic/frame descriptions
+# 
+# ###################################################
+# 
+# 
+# 
+# label_statement_topics.fns <- function(fit, out){
+# 
+#   ########
+#   # Add TOPIC label to each doc
+#   ########
+#   
+#   # Make a data.table of topic proportions
+#   topics_DT <- make.dt(fit, meta = out$meta)
+#   
+#   # Pivot longer so each doc is repeated 20 times
+#   topics_long <- 
+#     pivot_longer(
+#       data = topics_DT,
+#       cols = starts_with("Topic"),
+#       names_to = "topic",
+#       names_prefix = "Topic",
+#       values_to = "topic_prob"
+#     ) %>% 
+#     as.data.frame()
+#   
+#   # Arrange by doc index, then desc(prob)
+#   # So the highest probability observation is first
+#   topics_long <- 
+#     topics_long %>% 
+#     group_by(indx) %>% 
+#     arrange(desc(topic_prob), .by_group = TRUE) %>% 
+#     ungroup()
+#   
+#   
+#   # Create mainTopic.df
+#   # (keep only the observation with the highest prob)
+#   mainTopic.df <- 
+#     topics_long %>% 
+#     distinct(indx, .keep_all = TRUE)
+#   
+#   ########
+#   # Add FRAME label to each doc
+#   ########
+# 
+#   # Get the remaining frames
+#   remaining_frames <-
+#     setdiff(topics_long, mainTopic.df) %>% 
+#     group_by(indx) %>% 
+#     arrange(desc(topic_prob), .by_group = TRUE) %>% 
+#     ungroup()
+#   
+#   # Keep only the highest prob frame
+#   mainFrame <-
+#     remaining_frames %>% 
+#     distinct(indx, .keep_all = TRUE)
+#   
+#   # Rename "frame" and "frame_prob" and only keep them and indx in simple df
+#   mainFrame_simple <-
+#     mainFrame %>% 
+#     rename(frame = topic,
+#            frame_prob = topic_prob) %>% 
+#     select(indx, frame, frame_prob)
+#   
+#   
+#   ########
+#   # Merge TOPIC and FRAME dfs
+#   ########
+#   
+#   # Merge frames onto main topic df
+#   topicsFrames.df <- 
+#     left_join(
+#       mainTopic.df
+#       , mainFrame_simple
+#       , by = c("indx")
+#     )
+# 
+#   
+#   ########
+#   # Remove the incorrect caucus info
+#   ########
+#   
+#   topicsFrames.df <-
+#     topicsFrames.df %>% 
+#     select(-c(contains("_leader"), contains("_titles"),
+#               contains("_taskforces"), contains("_member")))
+#   
+#   
+#   
+#   ########
+#   # Add topic labels onto data.frame
+#   # To provide information about topics/frames
+#   ########
+#   
+# 
+#   # Pull 7 and 4 word summaries (estimated by STM)
+#   set.seed(5555)
+#   # 7-word summary
+#   fit.labels <- labelTopics(fit, 1:20, n = 7)
+#   # 4-word summary
+#   fit.labels_short <- labelTopics(fit, 1:20, n = 4) 
+#   
+#   
+#   # Labels for TOPICS
+#   # Topic # and short/long descriptions
+#   topic_labels.df <- data.frame(topic = as.character(fit.labels$topicnums),
+#                           topic_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
+#                           topic_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
+#   
+#   # Labels for FRAMES
+#   frame_labels.df <- data.frame(frame = as.character(fit.labels$topicnums),
+#                                 frame_label = apply(fit.labels$prob, 1, paste0, collapse = "; "),
+#                                 frame_label_short = apply(fit.labels_short$prob, 1, paste0, collapse = "; "))
+#   
+#   
+#   ########
+#   # Merge topic labels onto data
+#   ########
+#   topicsFrames.df <- 
+#     topicsFrames.df %>% 
+#     dtplyr::lazy_dt() %>% 
+#     left_join(topic_labels.df, by = "topic") %>% 
+#     as.data.frame()
+#   
+#   ########
+#   # Merge frame labels onto data
+#   ########
+#   topicsFrames.df <- 
+#     topicsFrames.df %>% 
+#     dtplyr::lazy_dt() %>% 
+#     left_join(frame_labels.df, by = "frame") %>% 
+#     as.data.frame()
+#   
+#   
+# } ##################################  End label_statement_topics.fns function
+# 
+# 
+# 
+# 
+# 
+# ###############
+# # Apply topic label function
+# ##############
+# set.seed(7777)
+# topicsFrames.R <-
+#   label_statement_topics.fns(
+#     fit = fit.R,
+#     out = out.R)
+# 
+# # Remove 2021 press releases (there are only 8, compared to 20k for the others)
+# topicsFrames.R <-
+#   topicsFrames.R %>% 
+#   filter(date_pr < ymd("2021-01-01"))
+# 
+# 
+# # Table: Examples of Statement title, Topic, Frame
+# # Pull random examples:
+# sample_n(topicsFrames.R, 1) %>% select(title_pr, topic_label, frame_label)
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# ##########################################################
+# # Most Common Frames
+# # Make DF for diffusion network
+# ##########################################################
+# 
+# 
+# # For each topic, what is the most common frame?
+# mostCommonFrames.R <-
+#   topicsFrames.R %>% 
+#   group_by(topic) %>% 
+#   count(frame) %>% 
+#   summarize(frame = as.character(which.max(n))) 
+# 
+# 
+# ####
+# # Pull the unique descriptions of topics/frames
+# ####
+# 
+# # Topic descriptions
+# topicDescs.df <-
+#   topicsFrames.R %>% 
+#   select(topic, topic_label, topic_label_short) %>% 
+#   distinct()
+# 
+# # Frame descriptions
+# frameDescs.df <-
+#   topicsFrames.R %>% 
+#   select(frame, frame_label, frame_label_short) %>% 
+#   distinct()
+#   
+# # Merge TOPIC descriptions onto table
+# mostCommonFrames.R <-
+#   mostCommonFrames.R %>% 
+#   left_join(., topicDescs.df
+#             , by = "topic"
+#             )
+# 
+# # Merge FRAME descriptions onto table
+# mostCommonFrames.R <-
+#   mostCommonFrames.R %>% 
+#   left_join(., frameDescs.df,
+#             by = "frame")
 
 
 
