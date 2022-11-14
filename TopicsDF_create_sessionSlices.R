@@ -18,6 +18,10 @@ packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
               , "data.table", "cowplot", "grid", "gridExtra", "egg"
               , "plm")
 
+# Install packages, if necessary
+new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
 # Load packages
 lapply(packages, require, character.only = TRUE)
 
@@ -859,38 +863,56 @@ freq.leaderrank.long <-
 # Leadership vs rank-and-file Figure (both parties) - Make
 ############
 
-leadershipFill <- with(freq.leaderrank.long
-                       , ifelse(party == "R" & leadership == "leader", "dark red"
-                       , ifelse(party == "D" & leadership == "leader", "dark blue"
-                       , "white")))
-
 # Unite leadership and party to create a new factor
 freq.leaderrank.long <-
-  tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE)
+  tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE) %>% 
+  mutate(role_party = factor(role_party, levels = c("leader_D", "leader_R", "rank_D", "rank_R"), ordered = TRUE))
+
+# new attempt
+freq.leaderrank.long <-
+  tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE) %>% 
+  mutate(role_party = factor(role_party, levels = c("rank_D", "rank_R", "leader_D", "leader_R"), ordered = TRUE))
+         
 
 ggplot(freq.leaderrank.long
        , aes(y = factor(topicName)
              , x = freq
-             , group = factor(leadership)
-             , fill = interaction(leadership, party, sep=":")
-             , color = interaction(leadership, party, sep=":"))) +
-  geom_bar(stat = "identity"
+             , group = factor(leadership))) +
+  geom_bar(aes(fill = factor(role_party)
+               , color = factor(role_party)
+               )
+           , stat = "identity"
            , width = 0.6
-           , position = position_dodge()
-           , color = "black") +
+           , position = "dodge"
+           # , color = "black"
+           ) +
   theme_bw() +
-  geom_vline(xintercept = 0)
-
-
-ggplot(freq.leaderrank.long
-       , aes(y = factor(topicName)
-             , x = freq
-             , fill = leadershipFill
-             # , fill = fct_rev(factor(leadership))
-             )) +
-  geom_bar(stat = "identity", width = 0.6, position = "dodge", color = "dark gray") +
   geom_vline(xintercept = 0) +
-  theme_bw()
+  scale_fill_manual(values = c("leader_R" = "dark red", "rank_R" = "#ffdadb"
+                               , "leader_D" = "dark blue", "rank_D" = "light blue")
+                    , name = ""
+                    , labels = c("Rank-and-file (D)"
+                                 , "Rank-and-file (R)"
+                                 , "Leadership (D)"
+                                 , "Leadership (R)")) +
+  scale_color_manual(values = c("leader_R" = "dark red", "rank_R" = "dark red"
+                                , "leader_D" = "dark blue", "rank_D" = "dark blue")
+                     , guide = "none"
+                     ) +
+  scale_y_discrete(limits = rev(party.topic.limits)) +
+  ylab("") +
+  xlab("Dem                                                           Rep") +
+  scale_x_continuous(breaks = c(-10, 0, 10), 
+                     labels = paste0(c(10, 0, 10),"%")) +
+  ggtitle("Leadership focus on different topics compared to rank-and-file members") +
+  theme(plot.title.position = "plot"
+        ,plot.title = element_text(hjust = 0.5))
+  
+
+  
+
+
+
   
   
   scale_fill_manual(values = c("dark gray", "white")
