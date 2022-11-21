@@ -431,59 +431,33 @@ estimateNetwork_outputScore.fns <-
 # Apply networks and centrality function - Exponential model
 ###
 set.seed(1776)
-score_congressNet.list.exp.R <- estimateNetwork_outputScore.fns(first.obs.R, model = "exponential")
-score_congressNet.list.exp.D <- estimateNetwork_outputScore.fns(first.obs.D, model = "exponential")
+score_congressNet.list.R <- estimateNetwork_outputScore.fns(first.obs.R, model = "exponential")
+score_congressNet.list.D <- estimateNetwork_outputScore.fns(first.obs.D, model = "exponential")
 
-
-###
-# Apply networks and centrality function - Log-normal model
-###
-set.seed(1776)
-score_congressNet.list.lnorm.R <- estimateNetwork_outputScore.fns(first.obs.R, model = "log-normal")
-score_congressNet.list.lnorm.D <- estimateNetwork_outputScore.fns(first.obs.D, model = "log-normal")
 
 
 
 
 ###
-# Flatten to dfs - Exponential
+# Flatten to dfs 
 ###
 
 # Dems
-score_congressNet.df.exp.D <- bind_rows(
-  score_congressNet.list.exp.D[[1]],
-  score_congressNet.list.exp.D[[2]],
-  score_congressNet.list.exp.D[[3]],
-  score_congressNet.list.exp.D[[4]],
+score_congressNet.df.D <- bind_rows(
+  score_congressNet.list.D[[1]],
+  score_congressNet.list.D[[2]],
+  score_congressNet.list.D[[3]],
+  score_congressNet.list.D[[4]],
 )
 
 # Repubs
-score_congressNet.df.exp.R <- bind_rows(
-  score_congressNet.list.exp.R[[1]],
-  score_congressNet.list.exp.R[[2]],
-  score_congressNet.list.exp.R[[3]],
-  score_congressNet.list.exp.R[[4]],
+score_congressNet.df.R <- bind_rows(
+  score_congressNet.list.R[[1]],
+  score_congressNet.list.R[[2]],
+  score_congressNet.list.R[[3]],
+  score_congressNet.list.R[[4]],
 )
 
-###
-# Flatten to dfs - Log-normal
-###
-
-# Dems
-score_congressNet.df.lnorm.D <- bind_rows(
-  score_congressNet.list.lnorm.D[[1]],
-  score_congressNet.list.lnorm.D[[2]],
-  score_congressNet.list.lnorm.D[[3]],
-  score_congressNet.list.lnorm.D[[4]],
-)
-
-# Repubs
-score_congressNet.df.lnorm.R <- bind_rows(
-  score_congressNet.list.lnorm.R[[1]],
-  score_congressNet.list.lnorm.R[[2]],
-  score_congressNet.list.lnorm.R[[3]],
-  score_congressNet.list.lnorm.R[[4]],
-)
 
 
 
@@ -535,11 +509,8 @@ numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
 ###
 # Apply function
 ###
-new.score.df.R.exp <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.exp.R)
-new.score.df.D.exp <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.exp.D)
-
-new.score.df.R.lnorm <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.lnorm.R)
-new.score.df.D.lnorm <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.lnorm.D)
+new.score.df.R <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.R)
+new.score.df.D <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.D)
 
 
 
@@ -646,50 +617,33 @@ covariates.df.D <- propubVars.fun(out.D, leg_covs)
 # Merge score.df with covariates.df
 ####
 
-scoreCongressNets_legCovs.R.exp <-
+scoreCongressNets_legCovs.R <-
   left_join(
-    new.score.df.R.exp
+    new.score.df.R
     , covariates.df.R,
     by = c("member_id", "congress")
   )
 
-scoreCongressNets_legCovs.D.exp <-
+scoreCongressNets_legCovs.D <-
   left_join(
-    new.score.df.D.exp
+    new.score.df.D
     , covariates.df.D
     , by = c("member_id", "congress")
   )
 
-
-
-scoreCongressNets_legCovs.R.lnorm <-
-  left_join(
-    new.score.df.R.lnorm
-    , covariates.df.R,
-    by = c("member_id", "congress")
-  )
-
-scoreCongressNets_legCovs.D.lnorm <-
-  left_join(
-    new.score.df.D.lnorm
-    , covariates.df.D
-    , by = c("member_id", "congress")
-  )
 
 
 ###
 # Merge Democrats and Republicans together
 ###
 
-dat_congressNets.exp <- rbind(scoreCongressNets_legCovs.D.exp, scoreCongressNets_legCovs.R.exp)
-dat_congressNets.lnorm <- rbind(scoreCongressNets_legCovs.D.lnorm, scoreCongressNets_legCovs.R.lnorm)
+dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
 
 
 ###
 # Make member names pretty for figure purposes
 ###
-dat_congressNets.exp$bioname <- str_to_title(dat_congressNets.exp$bioname)
-dat_congressNets.lnorm$bioname <- str_to_title(dat_congressNets.lnorm$bioname)
+dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
 
 
   
@@ -1066,11 +1020,8 @@ return(plm.pr1)
 # Produce regression results
 ####
 
-reg.exp <- reg.funs(dat_congressNets.exp)
-reg.lnorm <- reg.funs(dat_congressNets.lnorm)
+reg.results <- reg.funs(dat_congressNets)
 
-summary(reg.exp)
-summary(reg.lnorm)
 
 
 # PageRank with all controls with random individual fixed effects
@@ -1288,102 +1239,6 @@ D114.network <- createNetworks.minifns(D114.cascades)
 D115.network <- createNetworks.minifns(D115.cascades)
 D116.network <- createNetworks.minifns(D116.cascades)
 
-
-
-######
-# Attempt to determine correct distribution for data
-######
-
-# Get all the cascade times
-cascadeTimes <- unlist(lapply(
-  X = list(D113.cascades$cascade_times, D114.cascades$cascade_times
-           , D115.cascades$cascade_times, D116.cascades$cascade_times
-           , R113.cascades$cascade_times, R114.cascades$cascade_times
-           , R115.cascades$cascade_times, R116.cascades$cascade_times)
-  , FUN = unlist
-  , use.names = FALSE
-))
-
-# Look at Cullen and Fray graph
-# It is a skewness and kurtosis plot 
-# Values for common distributed are displayed
-# For some distributions (normal, uniform, logisltic, exp) there is only one possible value for the skewness and kurtosis
-# For others (gama and lognormal) are lines for all possible values
-# For beta is is a large area
-# Skewness and kurtosis are not super robust and have very high variance 
-# so we can use a nonparametric bootstrap procedure to 
-# take into account the uncertainty of the estimated kurtosis/skewness measures
-library(fitdistrplus)
-
-# Plot the distribution - histogram + density and CDF
-plotdist(cascadeTimes, histo = TRUE, demp = TRUE)
-
-# Descriptive statistics
-# Skewness and kurtosis - linked to the third and forth moments
-# Non-zero skewness = lack of symmetry in the distribution
-# Kurtosis values = quantifies the weight of tails in comparison to the normal distribution
-  # For ~N, kurtosis = 3
-# Both are
-# Plot skewness-kurtosis 
-descdist(cascadeTimes, discrete = FALSE)
-
-#########
-# Fit distributions by MLE - 3 options in NetInf
-# Returned fitdist object has functions: print, summary, and plot
-# Returns: the parameter estimates, estimated standard errors,
-  # the loglikelihood, the AIC and BIC, the correlation matrix between parameter estimates
-##########
-
-###
-# Exponential
-# params = lambda
-# base R (exp)
-###
-
-# Scale the cascade times (which are numeric conversions of dates so the algo works)
-fit.exp <- fitdist(cascadeTimes/100, "exp")
-summary(fit.exp)
-
-###
-# Log-normal
-# params = mu, sigma (mean and variation)
-# base R (lnorm)
-###
-fit.lnorm <- fitdist(cascadeTimes/100, "lnorm")
-summary(fit.lnorm)
-
-
-###
-# Rayleigh
-# params = alpha
-# in VGAM, extraDistr, and lmomco packages
-###
-drayleigh <- extraDistr::drayleigh
-prayleigh <- extraDistr::prayleigh
-qrayleigh <- extraDistr::qrayleigh
-
-# Shape (sigma): 0.5 and 1
-fit.rayleigh.0.5 <- fitdist(cascadeTimes/100
-                            , "rayleigh"
-                            , start = list(sigma = 0.5))
-
-fit.rayleigh.1 <- fitdist(cascadeTimes/100
-                        , "rayleigh"
-                        , start = list(sigma = 1))
-
-summary(fit.rayleigh.0.5)
-summary(fit.rayleigh.1)
-
-
-# Plot the 4 classical goodness-of-fit plots (Cullen and Fray, 1999 - cullen_probabilistic_1999)
-# Following: http://www.di.fc.ul.pt/~jpn/r/distributions/fitting.html
-par(mfrow = c(2, 2))
-plot.legend <- c("Exponential", "Log-normal", "Rayleigh")
-denscomp(list(fit.exp, fit.lnorm, fit.rayleigh.1))
-cdfcomp(list(fit.exp, fit.lnorm, fit.rayleigh.1))
-qqcomp(list(fit.exp, fit.lnorm, fit.rayleigh.1))
-ppcomp(list(fit.exp, fit.lnorm, fit.rayleigh.1))
-par(mfrow = c(1, 1))
 
 
 ####################################
