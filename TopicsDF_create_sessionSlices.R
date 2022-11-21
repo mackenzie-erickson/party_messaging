@@ -1611,8 +1611,141 @@ tkplot(
 
 
 ########################################################################
+########################################################################
+# Topic Exploration - Plots
+########################################################################
+########################################################################
+
+# S-Curves
+
+# Start with a single topic - Dems talking about climate in 116th congress
+dem.climate.116 <- first.obs.D %>% 
+  filter(congress == 113 & topicName == "Iran nuclear")
+
+infections.by.time <- dem.climate.116 %>% 
+  # filter(date_pr < ymd("2014-03-01")) %>% 
+  group_by(lubridate::month(date_pr, label = TRUE, abbr = TRUE)) %>% 
+  summarize(n.infections = n()) %>% 
+  ungroup() %>% 
+  mutate(cum.infections = cumsum(n.infections))
 
 
+ggplot(infections.by.time, aes(x = `month(date_pr)`)) +
+  geom_smooth(aes(y = n.infections), se = FALSE) +
+  geom_smooth(aes(y = cum.infections), se = FALSE)
+  
+
+
+# Plot density of use
+topics_df.D %>%
+  filter(congress == 116 & topicName == "Climate") %>% 
+  ggplot(., aes(x = date_pr)) +
+  geom_smooth()
+  geom_density(aes(y = cumsum(after_stat(count))))
+  stat_bin(aes(y=cumsum(after_stat(count))), geom="step")
+
+# normal hist
+  geom_histogram()
+  
+  # cum hist
+  geom_histogram(aes(y = cumsum(..count..)))
+
+
+
+
+
+
+# Effect estimation of topic prevalence over time
+
+fit.labels <- labelTopics(fit, 1:20)
+out$meta$datum <- as.numeric(out$meta$date_pr)
+# Smoothed date - prevalence of topic
+fit.ee.date <- estimateEffect(1:20 ~ s(datum),
+                              fit,
+                              metadata = out$meta)
+saveRDS(fit.ee.date, "/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Party_messaging/Data/output/2022-04-12_fitEE_houseD.rds")
+
+
+topic12plot <- 
+  plot(fit.ee.date, "datum",
+       method = "continuous", topics = 12,
+       main = paste0(fit.labels$prob[12, 1:3], collapse = ", ")
+  ) 
+
+
+
+# Plot each topic and it's prevalence by time/date using ggplot
+
+# Pull out effects
+library(stminsights)
+gg.effects <- get_effects(estimates = fit.ee.date,
+                          variable = "datum",
+                          type = "continuous")
+
+# Plot - Dem House, Topic 12 ("President Trump")
+gg.effects %>% 
+  filter(topic == 2) %>% 
+  ggplot(aes(x = value, y = proportion)) +
+  geom_line(color = "blue") +
+  geom_line(aes(x = value, y = lower), lty = "dashed", color = "blue") +
+  geom_line(aes(x = value, y = upper), lty = "dashed", color = "blue") +
+  theme_light() +
+  ggtitle("Effect of date on Topic 2 prevalence", 
+          subtitle = paste0(fit.labels$prob[2, 1:3], collapse = ", ")) +
+  scale_x_continuous(breaks = c(
+    as.numeric(as.Date("2014-01-01")),
+    as.numeric(as.Date("2016-01-01")),
+    as.numeric(as.Date("2018-01-01")),
+    as.numeric(as.Date("2020-01-01"))
+  ),
+  labels = c("2014", "2016", "2018", "2020"),
+  name = "Year") +
+  ylab("Topic proportion")
+
+
+# Make list to store plots
+plot_list <- list()
+
+i <- 1
+for (i in 1:20) {
+  
+  p <-
+    gg.effects %>% 
+    filter(topic == i) %>% 
+    ggplot(aes(x = value, y = proportion)) +
+    geom_line(color = "blue") +
+    geom_line(aes(x = value, y = lower), lty = "dashed", color = "blue") +
+    geom_line(aes(x = value, y = upper), lty = "dashed", color = "blue") +
+    theme_light() +
+    ggtitle(paste("Effect of date on Topic", i, "prevalence"), 
+            subtitle = paste0(fit.labels$prob[i, 1:3], collapse = ", ")) +
+    scale_x_continuous(breaks = c(
+      as.numeric(as.Date("2014-01-01")),
+      as.numeric(as.Date("2016-01-01")),
+      as.numeric(as.Date("2018-01-01")),
+      as.numeric(as.Date("2020-01-01"))
+    ),
+    labels = c("2014", "2016", "2018", "2020"),
+    name = "Year") +
+    ylab("Topic proportion")
+  
+  plot_list[[i]] <- p
+}
+
+# Save plots
+
+i <- 1
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Party_messaging/Data/output/topicPlots/plotTopicsbyYear.pdf")
+for (i in 1:20) {
+  print(plot_list[[i]])
+}
+dev.off()
+
+
+
+
+########################################################################
+########################################################################
 
 
 
