@@ -157,7 +157,7 @@ topics_df.D <- label_statement_topics.fns(topics_DT.D, fit.D, k = 30)
 
 
 ############################################################
-# Get the first use of each topic by each member
+# Create session variable
 
 ###
 # Create variable for session slices - Function
@@ -436,8 +436,6 @@ score_congressNet.list.D <- estimateNetwork_outputScore.fns(first.obs.D, model =
 
 
 
-
-
 ###
 # Flatten to dfs 
 ###
@@ -459,14 +457,99 @@ score_congressNet.df.R <- bind_rows(
 )
 
 
+###################
+# Politically Salient - Create scores using only politically-salient topics
+# For comparison
+###################
+
+###
+# Apply networks and centrality function - Politically Salient
+###
+set.seed(1776)
+score_list_salient.R <- estimateNetwork_outputScore.fns(politSalient.R, model = "exponential")
+score_list_salient.D <- estimateNetwork_outputScore.fns(politSalient.D, model = "exponential")
+
+
+###
+# Flatten to dfs (politically salient)
+###
+
+# Dems
+score_salient.df.D <- bind_rows(
+  score_list_salient.D[[1]],
+  score_list_salient.D[[2]],
+  score_list_salient.D[[3]],
+  score_list_salient.D[[4]],
+)
+
+# Repubs
+score_salient.df.R <- bind_rows(
+  score_list_salient.R[[1]],
+  score_list_salient.R[[2]],
+  score_list_salient.R[[3]],
+  score_list_salient.R[[4]],
+)
+
+
+######
+# Politically salient - comparison
+#####
+
+# Pull out relevant columns, rename and bind D and R - salient
+score_salient.D <- score_salient.df.D %>% 
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+  rename(pagerank_REVERSE_salient = pagerank_REVERSE
+         , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+  mutate(party = "D")
+
+score_salient.R <- score_salient.df.R %>% 
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+  rename(pagerank_REVERSE_salient = pagerank_REVERSE
+         , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+  mutate(party = "R")
+
+score_salient.all <- bind_rows(score_salient.D, score_salient.R)
+
+# Pull out relevant columns, rename and bind D and R - salient and non-salient
+score_normal.D <- score_congressNet.df.D %>% 
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+  rename(pagerank_REVERSE_normal = pagerank_REVERSE
+         , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+  mutate(party = "D")
+
+score_normal.R <- score_congressNet.df.R %>% 
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+  rename(pagerank_REVERSE_normal = pagerank_REVERSE
+         , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+  mutate(party = "R")
+
+score_normal.all <- bind_rows(score_normal.D, score_normal.R)
+
+# Join together (salient is smaller b/c some people have no salient press releases)
+combined_scores <- left_join(score_normal.all, score_salient.all
+                             , by = c("member_id", "congress"))
+
+# Plot correlation
+ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
+  geom_point() +
+  geom_smooth() +
+  theme_minimal() +
+  labs(x = "Influence score - all topics", y = "Influence score - politically salient topics") +
+  ggtitle("Influence scores are robust to changes in included topics")
+
+# Caluclate correlation
+cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
+
 
 
 ###############################################################
+# Adding covariates
+###############################################################
 
-# Add in congress covariates; add in number of press releases; join with centrality df
 
 ###
 # Number PRs - Function
+# Add in congress covariates; add in number of press releases; join with centrality df
 ###
 
 numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
@@ -507,14 +590,13 @@ numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
 }
 
 ###
-# Apply function
+# Apply function - Add on number of PRs variables
 ###
-new.score.df.R <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.R)
-new.score.df.D <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.D)
+score_congressNet.df.R <- numPR.fns(topics_df.R, first.obs.R, score_congressNet.df.R)
+score_congressNet.df.D <- numPR.fns(topics_df.D, first.obs.D, score_congressNet.df.D)
 
 
 
-# COVARIATES - Create
 
 ###
 # William Minozzi covariates
@@ -532,11 +614,6 @@ leg_covs <-
   leg_covs %>% 
   mutate(white = ifelse(race_ethnicity == "White", 1, 0))
 
-# Scale unscaled variables
-leg_covs <-
-  leg_covs %>% 
-  mutate(scale_speeches_daily = scale(n_speeches_daily))
-
 
 ###
 # Add ProPublica covariates - Function
@@ -552,31 +629,27 @@ propubVars.fun <- function(out, leg_covs){
     propubdat %>% 
     select(member_id
            , congress
+           , first_name
+           , last_name
+           , middle_name
+           , full_name
            , bills_sponsored
            , bills_cosponsored
            , contains("_member")
-           , votes_with_party_pct)
-  
-  # Mutate relevant vars
-  propubdat.relevant <-
-    propubdat.relevant %>% 
-    mutate(scale_bills_sponsored = scale(bills_sponsored) # scale
-           , scale_bills_cosponsored = scale(bills_cosponsored) # scale
-           , scale_votes_with_party_pct = scale(votes_with_party_pct)
-           , caucus_member = 
-             # dummy for member of any caucus
-             ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)
-    ) %>% 
-    select(member_id
-           , congress
-           , bills_sponsored
-           , bills_cosponsored
+           , contains("_leader")
+           , contains("_taskforces")
            , votes_with_party_pct
-           , scale_bills_sponsored
-           , scale_bills_cosponsored
-           , scale_votes_with_party_pct
-           , caucus_member)
+           , votes_against_party_pct
+           , dw_nominate
+           , switched_party
+           , party_atPR
+           , current_party
+           , leadership_role) %>% 
+    # dummy for member of any caucus
+    mutate(caucus_member = ifelse(rowSums(select(., contains("_member")), na.rm = TRUE) > 0, 1, 0)) %>% 
+    rename(leadership_role_propublica = leadership_role)
   
+
   # Some members have duplicate member-congress (caused by both their real cosponsored # and another row with 0)
   # Just select the correct ones so there is one member-congress only
   propubdat.relevantFixed <-
@@ -619,14 +692,14 @@ covariates.df.D <- propubVars.fun(out.D, leg_covs)
 
 scoreCongressNets_legCovs.R <-
   left_join(
-    new.score.df.R
+    score_congressNet.df.R
     , covariates.df.R,
     by = c("member_id", "congress")
   )
 
 scoreCongressNets_legCovs.D <-
   left_join(
-    new.score.df.D
+    score_congressNet.df.D
     , covariates.df.D
     , by = c("member_id", "congress")
   )
@@ -638,6 +711,64 @@ scoreCongressNets_legCovs.D <-
 ###
 
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
+
+
+###############################################################
+# Clean up variables - scale, center, create dummies
+###############################################################
+
+###
+# Change dummies and categories to factors for regression
+###
+
+# Get names of columns with unique count of less than 4
+factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) < 4)
+
+# Change to factor
+dat_congressNets[ ,factor_col_names] <- lapply(dat_congressNets[ , factor_col_names] , factor)
+
+
+# Create folded nominate dim 1 score (extremism)
+dat_congressNets <- dat_congressNets %>% 
+  mutate(fold_nominate = ifelse(nominate_dim1 < 0, nominate_dim1 * -1, nominate_dim1))
+
+# Remove already-scaled variables (going to scale myself)
+dat_congressNets <-
+  dat_congressNets %>% 
+  select(!contains("scale"))
+
+######### LEFT OFF HERE
+
+# Log "count" variables - if relevant
+  # Do something so zeros don't screw it up (e.g. log(1p))
+  # Add (logged) to var name
+# Should also log the PR variable b/c it's right skewed
+
+tmp <- dat_congressNets %>% select(where(is.numeric))
+
+invisible(lapply(colnames(tmp),function(x){
+  hist(tmp[,x],breaks = 100, main=x,type="l")
+}))
+
+skewed_count_vars <- c("minoirty_leslag", "majority_leslag", "benchratiolag"
+                       , "leslag", "benchratio", "les", "seniority", "n_speeches_daily"
+                       , "votes_against_party_pct", "votes_with_party_pct", "bills_cosponsored"
+                       , "bills_sponsored", "pagerank_REVERSE")
+
+#### LEFT OFF HERE - this is not correct lol - trying to name and log multiple vars
+log_covars_funs <- function(dat, col){
+  new_var_name <- paste("log", names(col), sep = "_")
+  new_dat <- dat %>% 
+    mutate(new_var_name)
+}
+  
+
+
+
+###
+# Scale and center continuous variables
+###
+continuous_col_names <- sapply(dat_congressNets, function(col) is.numeric(col))
 
 
 ###
@@ -923,9 +1054,6 @@ ggplot(freq.leaderrank.long
 # Regressions: 
 ###########################################################
 
-# Temporary function to compare results with exp and lnorm distributions
-
-reg.funs <- function(dat_congressNets){
 
 # Transform score to make more readable (multiple by 100)
 dat_congressNets <-
@@ -1010,9 +1138,9 @@ plm.pr1 <- plm(PageRank ~
                  , model = "random"
                  , index = c("member_id", "Congress"))
 
+summary(plm.pr1)
 
-return(plm.pr1)
-} # end regression function
+
 
 
 
@@ -1137,6 +1265,87 @@ texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
        , custom.gof.rows = list("Random effects" = c("YES", "YES", "YES"))
        , float.pos = "h"
        )
+
+
+
+
+
+
+
+
+
+###############################################################################
+###############################################################################
+# Chapter 2 - FREX stems tables
+###############################################################################
+###############################################################################
+
+library(knitr)
+library(kableExtra)
+
+# Create tables of topic names and labels
+
+topicNames_tab.R <-
+  first.obs.R %>% 
+  select(topic_label, topicName, salient) %>% 
+  unique() %>% 
+  arrange(desc(salient))
+
+topicNames_tab.D <-
+  first.obs.D %>% 
+  select(topic_label, topicName, salient) %>% 
+  unique() %>% 
+  arrange(desc(salient))
+
+# Specify non-politically relevant rows
+gray_rows.R <- which(topicNames_tab.R$salient == 0)
+gray_rows.D <- which(topicNames_tab.D$salient == 0)
+
+kable(select(topicNames_tab.R, -salient)
+      , booktabs = TRUE
+      , format = 'latex'
+      # , row.names = NULL
+      , col.names = c('FREX stems', 'Topic')
+      , caption = "Republican press release topics"
+      , label = "tab:topicNames.R"
+      , ) %>% 
+  kable_styling(latex_options = 'scale_down') %>%
+  row_spec(gray_rows.R, color = "gray") %>% 
+  footnote("Press releases clustered into 30 topics. FREX stems are the top words in 
+  each topic cluster that are both frequent and exclusive and are best able to 
+  distinguish the topic.  Topics in gray represent those that may not be 
+  considered politically relevant.")
+
+kable(select(topicNames_tab.D, -salient)
+      , booktabs = TRUE
+      , format = 'latex'
+      # , row.names = NULL
+      , col.names = c('FREX stems', 'Topic')
+      , caption = "Democratic press release topics"
+      , label = "tab:topicNames.D"
+      , ) %>% 
+  kable_styling(latex_options = 'scale_down') %>%
+  row_spec(gray_rows.D, color = "gray") %>% 
+  footnote("Democratic press releases clustered into 30 topics. FREX stems are the top stems in 
+  each topic cluster that are both frequent and exclusive and are best able to 
+  distinguish the topic.  Topics in gray represent those that may not be 
+  considered politically relevant.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1499,18 +1708,153 @@ topics_df.D %>%
   geom_density(aes(y = cumsum(after_stat(count))))
   stat_bin(aes(y=cumsum(after_stat(count))), geom="step")
 
-# normal hist
-  geom_histogram()
+library(scales)
   
-  # cum hist
-  geom_histogram(aes(y = cumsum(..count..)))
+topics_df.D %>% 
+  filter(congress == 115 & salient == 1) %>% 
+  # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
+  ggplot(data = ., aes(x = date_pr)) +
+  geom_step(aes(y = ..y..), stat = "ecdf") +
+  scale_x_date(labels = scales::label_date_short()) +
+  facet_wrap(~topicName)
+
+######
+# D & R s-curves of Immigration during 115th congress (first immigration ban signed Jan 2017)
+#####
+
+# Democrats
+dem.immi.115 <- 
+  topics_df.D %>% 
+  filter(congress == 115 & topicName == "Immigration") %>% 
+  ggplot(data = ., aes(x = date_pr)) +
+  geom_step(aes(y = ..y..), stat = "ecdf") +
+  # scale_x_date(labels = scales::label_date_short()) +
+  annotate(geom = "text"
+           , x = ymd("2017-06-10")
+           , y = 0.12
+           , label = "Early adopters") +
+  annotate(geom = "text"
+           , x = ymd("2017-11-08")
+           , y = 0.28
+           , label = "Early majority") +
+  annotate(geom = "text"
+           , x = ymd("2018-03-01")
+           , y = 0.68
+           , label = "Late majority") +
+  annotate(geom = "text"
+           , x = ymd("2018-06-30")
+           , y = 0.94
+           , label = "Laggards") +
+  theme_minimal() +
+  labs(x = "", y = "") +
+  theme(axis.text.x.bottom = element_blank()) +
+  ggtitle("Democratic press releases X") # <- Trying to remove bottom x axis on Dem plot, and then put together with R. Then just write 
+# caption about how it follows a common s-curve-ish. Say that a figure with all topics can be found in the appendix
+
+# Republicans
+rep.immi.115 <- topics_df.R %>% 
+  filter(congress == 115 & topicName == "Immigration") %>% 
+  ggplot(data = ., aes(x = date_pr)) +
+  geom_step(aes(y = ..y..), stat = "ecdf") +
+  scale_x_date(labels = scales::label_date_short()) +
+  theme_minimal() +
+  labs(x = "", y = "") +
+  ggtitle("Republican press releases")
+
+###
+# Put them together
+###
+
+# Create title
+title.grob.immigration <- textGrob("Diffusion of immigration through members' press releases")
+
+# Arrange grobs
+grid.arrange(arrangeGrob(dem.immi.115, rep.immi.115
+                         , ncol = 1
+                         , top = title.grob.immigration))
+
+
+# ###
+# # Create "master" axis grobs
+# ###
+# 
+# # Master y axis
+# y.grobImprovement <- textGrob("Improvement", rot = 90)
+# 
+# # Master x axis
+# x.grobEdgeNum <- textGrob("Edge Number")
+# 
+# # Super axis - party
+# x.grobParty <- textGrob("Democrats                                  Republicans"
+#                         , gp = gpar(fontsize = 14, fontface = "bold"))
+# 
+# # Arrange axis grobs and plot objects
+# grid.arrange(arrangeGrob(impD113.pl, impR113.pl
+#                          , impD114.pl, impR114.pl
+#                          , impD115.pl, impR115.pl
+#                          , impD116.pl, impR116.pl
+#                          , ncol = 2
+#                          , left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
+# 
+# 
+# 
+# 
+# ###################################
+# # Plot: p-value from the Vuong test associated with each edge addition
+# ###################################
+# # Create plot objects
+# vuongD113.pl <- plot(D113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "113th Congress")
+# vuongD114.pl <- plot(D114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "114th Congress")
+# vuongD115.pl <- plot(D115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "115th Congress")
+# vuongD116.pl <- plot(D116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "116th Congress")
+# 
+# vuongR113.pl <- plot(R113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+# vuongR114.pl <- plot(R114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+# vuongR115.pl <- plot(R115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+# vuongR116.pl <- plot(R116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
+# 
+# ###
+# # Create "master" axis grobs
+# ###
+# 
+# # Master y axis
+# y.grobPValue <- textGrob("P-Value", rot = 90)
+# 
+# # Master x axis
+# x.grobEdgeNum <- textGrob("Edge Number")
+# 
+# # Super axis - party
+# x.grobParty <- textGrob("Democrats                                  Republicans"
+#                         , gp = gpar(fontsize = 14, fontface = "bold"))
+# 
+# # Arrange axis grobs and plot objects
+# grid.arrange(arrangeGrob(vuongD113.pl, vuongR113.pl
+#                          , vuongD114.pl, vuongR114.pl
+#                          , vuongD115.pl, vuongR115.pl
+#                          , vuongD116.pl, vuongR116.pl
+#                          , ncol = 2
+#                          , left = y.grobPValue, top = x.grobParty, bottom = x.grobEdgeNum))
 
 
 
 
 
 
-# Effect estimation of topic prevalence over time
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ # Effect estimation of topic prevalence over time
 
 fit.labels <- labelTopics(fit, 1:20)
 out$meta$datum <- as.numeric(out$meta$date_pr)
@@ -1666,7 +2010,7 @@ firstObs_all %>%
   filter(congress == 116) %>% 
   {ggplot(data = .) +
   geom_histogram(aes(x = date_pr), bins = 30) +
-      facet_wrap(~ topicName) +
+      facet_wrap(~ topicName, scales = "free_y") +
       theme_minimal() +
     labs(x = "Date of first use, Jan 2019 - Jan 2021", y = "") +
       theme(axis.text.x = element_blank()
@@ -2288,31 +2632,6 @@ frame.eigens_all <- bind_rows(frame.eigens_113
                         , frame.eigens_116)
 
 
-
-
-# LEFT OFF HERE
-##########################################################
-# Merge eigencentrality.df with leg_data
-###########################################################
-
-
-###### TEMP #############
-# Examine legislative covariates
-# TO DO: Code to be cleaned up and moved to the beginning of the script most likely
-#######################
-
-# Examine legislative_covariates
-
-# GO QUICK - DO it DIRTY
-# Merge all the data
-# Hand write a list 
-  # - what definitely doesn't apply (e.g. Republican, Dem)
-  # - what is probably repeats
-  # - what is probably perfectly collinear
-# Then from the rest, select the most interesting ones for a regression
-
-# Then, google multilevel models - how do related to FE and how do they help with having a huge N or multiple people
-  
 
 
 #############
