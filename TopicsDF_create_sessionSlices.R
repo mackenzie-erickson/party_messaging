@@ -851,13 +851,7 @@ tmp <- dat_congressNets %>%
     )
     , ~ factor(.x, levels = 0:1, labels = c("No", "Yes"))))
   
-  across(ends_with("_member"), ~as.factor(.x, levels = 0:1, labels = c("No", "Yes")))
- 
-mutate(across(v1:v2, ~ .x + n))               
-                
-iris %>%
-  group_by(Species) %>%
-  summarise(across(starts_with("Sepal"), ~ mean(.x, na.rm = TRUE)))
+
 
 # Set up all variables 
 vars0 <- with(dat_congressNets
