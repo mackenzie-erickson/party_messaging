@@ -12,11 +12,11 @@
 rm(list = ls())
 
 # Packages
-packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate",
-              "stringr", "stm", "quanteda", 
-              "texreg", "knitr", "kableExtra"
-              , "data.table", "cowplot", "grid", "gridExtra", "egg"
-              , "plm")
+packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate"
+              , "stringr", "stm", "quanteda", "stminsights"
+              , "texreg", "knitr", "kableExtra", "huxtable", "data.table"
+              , "cowplot", "grid", "gridExtra", "egg", "scales"
+              , "plm", "lfactors")
 
 # Install packages, if necessary
 new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
@@ -462,83 +462,83 @@ score_congressNet.df.R <- bind_rows(
 # For comparison
 ###################
 
-###
-# Apply networks and centrality function - Politically Salient
-###
-set.seed(1776)
-score_list_salient.R <- estimateNetwork_outputScore.fns(politSalient.R, model = "exponential")
-score_list_salient.D <- estimateNetwork_outputScore.fns(politSalient.D, model = "exponential")
-
-
-###
-# Flatten to dfs (politically salient)
-###
-
-# Dems
-score_salient.df.D <- bind_rows(
-  score_list_salient.D[[1]],
-  score_list_salient.D[[2]],
-  score_list_salient.D[[3]],
-  score_list_salient.D[[4]],
-)
-
-# Repubs
-score_salient.df.R <- bind_rows(
-  score_list_salient.R[[1]],
-  score_list_salient.R[[2]],
-  score_list_salient.R[[3]],
-  score_list_salient.R[[4]],
-)
-
-
-######
-# Politically salient - comparison
-#####
-
-# Pull out relevant columns, rename and bind D and R - salient
-score_salient.D <- score_salient.df.D %>% 
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
-  rename(pagerank_REVERSE_salient = pagerank_REVERSE
-         , pagerank_DIFF_salient = pagerank_DIFF) %>% 
-  mutate(party = "D")
-
-score_salient.R <- score_salient.df.R %>% 
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
-  rename(pagerank_REVERSE_salient = pagerank_REVERSE
-         , pagerank_DIFF_salient = pagerank_DIFF) %>% 
-  mutate(party = "R")
-
-score_salient.all <- bind_rows(score_salient.D, score_salient.R)
-
-# Pull out relevant columns, rename and bind D and R - salient and non-salient
-score_normal.D <- score_congressNet.df.D %>% 
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
-  rename(pagerank_REVERSE_normal = pagerank_REVERSE
-         , pagerank_DIFF_normal = pagerank_DIFF) %>% 
-  mutate(party = "D")
-
-score_normal.R <- score_congressNet.df.R %>% 
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
-  rename(pagerank_REVERSE_normal = pagerank_REVERSE
-         , pagerank_DIFF_normal = pagerank_DIFF) %>% 
-  mutate(party = "R")
-
-score_normal.all <- bind_rows(score_normal.D, score_normal.R)
-
-# Join together (salient is smaller b/c some people have no salient press releases)
-combined_scores <- left_join(score_normal.all, score_salient.all
-                             , by = c("member_id", "congress"))
-
-# Plot correlation
-ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
-  geom_point() +
-  geom_smooth() +
-  theme_minimal() +
-  labs(x = "Influence score - all topics", y = "Influence score - politically salient topics") +
-  ggtitle("Influence scores are robust to changes in included topics")
-
-# Caluclate correlation
-cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
+# ###
+# # Apply networks and centrality function - Politically Salient
+# ###
+# set.seed(1776)
+# score_list_salient.R <- estimateNetwork_outputScore.fns(politSalient.R, model = "exponential")
+# score_list_salient.D <- estimateNetwork_outputScore.fns(politSalient.D, model = "exponential")
+# 
+# 
+# ###
+# # Flatten to dfs (politically salient)
+# ###
+# 
+# # Dems
+# score_salient.df.D <- bind_rows(
+#   score_list_salient.D[[1]],
+#   score_list_salient.D[[2]],
+#   score_list_salient.D[[3]],
+#   score_list_salient.D[[4]],
+# )
+# 
+# # Repubs
+# score_salient.df.R <- bind_rows(
+#   score_list_salient.R[[1]],
+#   score_list_salient.R[[2]],
+#   score_list_salient.R[[3]],
+#   score_list_salient.R[[4]],
+# )
+# 
+# 
+# ######
+# # Politically salient - comparison
+# #####
+# 
+# # Pull out relevant columns, rename and bind D and R - salient
+# score_salient.D <- score_salient.df.D %>% 
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+#   mutate(party = "D")
+# 
+# score_salient.R <- score_salient.df.R %>% 
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+#   mutate(party = "R")
+# 
+# score_salient.all <- bind_rows(score_salient.D, score_salient.R)
+# 
+# # Pull out relevant columns, rename and bind D and R - salient and non-salient
+# score_normal.D <- score_congressNet.df.D %>% 
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+#   mutate(party = "D")
+# 
+# score_normal.R <- score_congressNet.df.R %>% 
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+#   mutate(party = "R")
+# 
+# score_normal.all <- bind_rows(score_normal.D, score_normal.R)
+# 
+# # Join together (salient is smaller b/c some people have no salient press releases)
+# combined_scores <- left_join(score_normal.all, score_salient.all
+#                              , by = c("member_id", "congress"))
+# 
+# # Plot correlation
+# ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
+#   geom_point() +
+#   geom_smooth() +
+#   theme_minimal() +
+#   labs(x = "Influence score - all topics", y = "Influence score - politically salient topics") +
+#   ggtitle("Influence scores are robust to changes in included topics")
+# 
+# # Caluclate correlation
+# cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
 
 
 
@@ -713,12 +713,15 @@ scoreCongressNets_legCovs.D <-
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
 
 
+
+
+
 ###############################################################
 # Clean up variables - scale, center, create dummies
 ###############################################################
 
 ###
-# Change dummies and categories to factors for regression
+# 1. Change dummies/categories to factors for regression
 ###
 
 # Get names of columns with unique count of less than 4
@@ -728,7 +731,10 @@ factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) <
 dat_congressNets[ ,factor_col_names] <- lapply(dat_congressNets[ , factor_col_names] , factor)
 
 
-# Create folded nominate dim 1 score (extremism)
+
+###
+# 2. Create folded nominate dim 1 score (extremism)
+###
 dat_congressNets <- dat_congressNets %>% 
   mutate(fold_nominate = ifelse(nominate_dim1 < 0, nominate_dim1 * -1, nominate_dim1))
 
@@ -737,314 +743,82 @@ dat_congressNets <-
   dat_congressNets %>% 
   select(!contains("scale"))
 
-######### LEFT OFF HERE
 
-# Log "count" variables - if relevant
-  # Do something so zeros don't screw it up (e.g. log(1p))
-  # Add (logged) to var name
-# Should also log the PR variable b/c it's right skewed
+###
+# 3. Log "count" variables - if relevant
+###
 
-tmp <- dat_congressNets %>% select(where(is.numeric))
+# Code to viz and decide which are skewed:
+# Get numeric columns
+# numeric_cols <- dat_congressNets %>% select(where(is.numeric))
 
-invisible(lapply(colnames(tmp),function(x){
-  hist(tmp[,x],breaks = 100, main=x,type="l")
-}))
+# Plot histograms of all numeric to identify skewed vars
+# invisible(lapply(colnames(numeric_cols),function(x){
+#   hist(numeric_cols[,x],breaks = 100, main=x,type="l")
+# }))
 
-skewed_count_vars <- c("minoirty_leslag", "majority_leslag", "benchratiolag"
+# Names of count vars to be logged
+skewed_count_vars <- dat_congressNets %>% 
+  select("minority_leslag", "majority_leslag", "benchratiolag"
                        , "leslag", "benchratio", "les", "seniority", "n_speeches_daily"
                        , "votes_against_party_pct", "votes_with_party_pct", "bills_cosponsored"
                        , "bills_sponsored", "pagerank_REVERSE")
 
-#### LEFT OFF HERE - this is not correct lol - trying to name and log multiple vars
-log_covars_funs <- function(dat, col){
-  new_var_name <- paste("log", names(col), sep = "_")
-  new_dat <- dat %>% 
-    mutate(new_var_name)
-}
-  
+
+# Log skewed vars and add prefix "log_" to the them
+dat_congressNets <- dat_congressNets %>%
+  mutate(across(names(skewed_count_vars)
+                , ~log(.x + 0.001)
+                , .names ="{.col}_ln"))
 
 
 
 ###
-# Scale and center continuous variables
+# 4. Scale and center continuous variables
 ###
-continuous_col_names <- sapply(dat_congressNets, function(col) is.numeric(col))
+
+# Updated list of continuous vars (including new logged vars)
+numeric_cols <- dat_congressNets %>% 
+  select(where(is.numeric)) %>% 
+  select(-c(indx, congress, district_code, govtrack_id, speakerid
+            , born, died, party_code, proximity_to_floor_centroid
+            , lag_proximity_to_floor_centroid
+            , proximity_to_floor_centroid_zero_code_missingness
+            , lag_proximity_to_floor_centroid_zero_code_missingness))
+
+
+
+dat_congressNets <- dat_congressNets %>%
+  mutate(across(names(numeric_cols)
+                , ~scale(.x, center = TRUE, scale = TRUE)
+                , .names ="{.col}_scaled"))
+
+
+
+
 
 
 ###
-# Make member names pretty for figure purposes
+# 5. Member names - make pretty
 ###
 dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
 
 
+###
+# 6. Party names - make pretty
+###
+# Remove party_code b/c it has missing values and no contradictions with party_atPR
+# Make new column with long-form name of party
+
+dat_congressNets <-
+  dat_congressNets %>% 
+  mutate(party_name = ifelse(party_atPR == "R", "Republican",
+                             ifelse(party_atPR == "D", "Democrat",
+                                    NA)))
   
 
 
 ##########################################################################
-
-####################################################
-# DESCRIPTIVE STATS - Appendix
-####################################################
-
-# Distribution of pagerank scores
-ggplot(dat_congressNets) +
-  geom_boxplot(aes(pagerank_REVERSE)) +
-  theme_minimal() +
-  labs(x = "Reverse PageRank") +
-  ggtitle("Distribution of Influence Scores")
-
-# Distribution of relative pagerank scores
-ggplot(dat_congressNets) +
-  geom_boxplot(aes(pagerank_DIFF)) +
-  theme_minimal() +
-  labs(x = "Relative PageRank score") +
-  ggtitle("Distribution of Relative PageRank scores")
-
-
-
-
-###########################################################################
-###########################################################################
-# Chapter 3: Topics by Predictor (seniority, leadership)
-# We can see that leadership and seniority talks about different topics
-# than rank-and-file and freshman
-###########################################################################
-###########################################################################
-
-########################
-# Press release frequency by party - ch2
-########################
-
-# % of press releases by topic - R
-freq.R <- topics_df.R %>%
-  group_by(topicName) %>%
-  summarise(cnt = n()) %>%
-  mutate(freq = round(cnt / sum(cnt), 3)) %>% 
-  arrange(desc(freq)) %>%
-  left_join(., topicNames.R
-            , by = c("topicName")) %>% 
-  filter(salient == 1) %>% 
-  select(topicName, freq)
-
-# % of press releases by topic - D
-freq.D <- topics_df.D %>%
-  group_by(topicName) %>%
-  summarise(cnt = n()) %>%
-  mutate(freq = round(cnt / sum(cnt), 3)) %>% 
-  arrange(desc(freq)) %>%
-  left_join(., topicNames.D
-            , by = c("topicName")) %>% 
-  filter(salient == 1) %>% 
-  select(topicName, freq)
-
-# Full join
-freq.both <- 
-  full_join(freq.R, freq.D
-            , by = "topicName") %>% 
-  rename(freq.R = freq.x
-         , freq.D = freq.y)
-
-
-# Edit for figure
-freq.both.edit <-
-  freq.both %>% 
-  mutate(freq.D = 100 * freq.D
-         , freq.R = 100 * freq.R) %>% 
-  mutate(freq.D = as.numeric(paste0("-", freq.D)))
-
-# Pivot longer
-freq.both.long <-
-  pivot_longer(data = freq.both.edit
-               , cols = c("freq.R", "freq.D")
-               , names_to = "party"
-               , names_prefix = "freq."
-               , values_to = "freq")
-
-#####
-# Arranging for figure
-####
-
-# Descending order for Dems
-freq.both.long <-
-  freq.both.long %>% 
-  arrange(desc(freq), .by_group = TRUE)
-
-# Get names to set the limits - Democrats (ascending order b/c negative)
-dem.topic.limits <-
-  freq.both.long %>% 
-  filter(party == "D") %>% 
-  filter(!is.na(freq)) %>% 
-  arrange(freq) %>% 
-  select(topicName) %>% 
-  pull()
-
-# Additional republican topics that Dems don't talk about (also ascending order)
-party.topic.limits <-
-  c(dem.topic.limits
-    , "Law and order", "China", "Small business", "Public lands", "Human trafficking"
-    , "Executive power", "Higher edu.", "Veterans' affairs", "Energy")
-
-
-
-# Make party-topic figure
-ggplot(freq.both.long, aes(
-  y = factor(topicName)
-  , x = freq
-  , fill = factor(freq < 0)) # color dem and rep differently
-  ) +
-  geom_bar(stat = "identity", width = 0.8) +
-  geom_vline(xintercept = 0) +
-  theme_bw() +
-  xlab("Dem                                                           Rep") +
-  ylab("") +
-  scale_x_continuous(breaks = c(-6, -3, 0, 3, 6), 
-                     labels = paste0(c(6, 3, 0, 3, 6),"%")) +
-  scale_y_discrete(limits = rev(party.topic.limits)) +
-  scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red")) +
-  ggtitle("Democrats and Republicans diverge in topic focus")
-
-
-
-
-##################
-# Ch2: topic frequency by leadership role
-#################
-
-# Merge extra data that is already appended to the score df for regression
-topics_dfExtra.D <-
-  left_join(topics_df.D, scoreCongressNets_legCovs.D
-            , by = c("member_id", "congress"))
-
-topics_dfExtra.R <-
-  left_join(topics_df.R, scoreCongressNets_legCovs.R
-            , by = c("member_id", "congress"))
-
-
-# Create separate leadership/rank-and-file freqs
-
-leader.rankfile.freq.fns <- function(topics_dfExtra) {
-  
-  leadership <-
-    topics_dfExtra %>%
-    filter(party_leadership == 1) %>%
-    filter(salient == 1) %>%
-    group_by(topicName) %>%
-    summarise(cnt = n()) %>%
-    mutate(freq = round(cnt / sum(cnt), 3)
-           , party_leadership = 1) %>%
-    arrange(desc(freq)) %>%
-    select(topicName, freq, party_leadership)
-  
-  rankfile <-
-    topics_dfExtra %>%
-    filter(party_leadership == 0) %>%
-    filter(salient == 1) %>%
-    group_by(topicName) %>%
-    summarise(cnt = n()) %>%
-    mutate(freq = round(cnt / sum(cnt), 3)
-           , party_leadership = 0) %>%
-    arrange(desc(freq)) %>%
-    select(topicName, freq, party_leadership)
-  
-  # Join
-  leaderandrank <-
-    full_join(leadership, rankfile
-              , by = "topicName") %>% 
-    rename(freq.leader = freq.x
-           , freq.rank = freq.y)
-  
-  
-  # Pivot longer
-  freq.leaderrank.long <-
-    pivot_longer(data = leaderandrank
-                 , cols = c("freq.leader", "freq.rank")
-                 , names_to = "leadership"
-                 , names_prefix = "freq."
-                 , values_to = "freq") %>% 
-    select(-c(party_leadership.x, party_leadership.y))
-  
-  # Turn into pcts 
-  freq.leaderrank.long <-
-    freq.leaderrank.long %>% 
-    mutate(freq = 100 * freq)
-  
-  
-} # End leader.rankfile.freq.fns
-
-# Apply function
-freq.leaderrank.R <- leader.rankfile.freq.fns(topics_dfExtra.R) %>% mutate(party = "R")
-freq.leaderrank.D <- leader.rankfile.freq.fns(topics_dfExtra.D) %>% mutate(party = "D")
-
-# Merge together
-freq.leaderrank.all <- 
-  full_join(freq.leaderrank.R
-            , freq.leaderrank.D
-            , by = c("topicName", "leadership")) %>% 
-  rename(freq.R = freq.x
-         , freq.D = freq.y)
-
-# Turn Dem's into negative for now
-freq.leaderrank.all <-
-  freq.leaderrank.all %>% 
-  mutate(freq.D = as.numeric(paste0("-", freq.D)))
-
-# Pivot longer
-freq.leaderrank.long <-
-  freq.leaderrank.all %>% 
-  pivot_longer(cols = c("freq.R", "freq.D")
-               , names_to = "party"
-               , names_prefix = "freq."
-               , values_to = "freq") %>% 
-  select(-c(party.x, party.y))
-
-#############
-# Leadership vs rank-and-file Figure (both parties) - Make
-############
-
-# Unite leadership and party to create a new factor
-freq.leaderrank.long <-
-  tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE) %>% 
-  mutate(role_party = factor(role_party, levels = c("rank_D", "rank_R", "leader_D", "leader_R"), ordered = TRUE))
-         
-
-ggplot(freq.leaderrank.long
-       , aes(y = factor(topicName)
-             , x = freq
-             , group = factor(leadership))) +
-  geom_bar(aes(fill = factor(role_party)
-               , color = factor(role_party))
-           , stat = "identity"
-           , width = 0.6
-           , position = "dodge") +
-  theme_bw() +
-  geom_vline(xintercept = 0) +
-  scale_fill_manual(values = c("leader_R" = "dark red", "rank_R" = "#ffdadb"
-                               , "leader_D" = "dark blue", "rank_D" = "light blue")
-                    , name = ""
-                    , labels = c("Rank-and-file (D)"
-                                 , "Rank-and-file (R)"
-                                 , "Leadership (D)"
-                                 , "Leadership (R)")) +
-  scale_color_manual(values = c("leader_R" = "dark red", "rank_R" = "dark red"
-                                , "leader_D" = "dark blue", "rank_D" = "dark blue")
-                     , guide = "none") +
-  scale_y_discrete(limits = rev(party.topic.limits)) +
-  ylab("") +
-  xlab("Dem                                                           Rep") +
-  scale_x_continuous(breaks = c(-10, 0, 10), 
-                     labels = paste0(c(10, 0, 10),"%")) +
-  ggtitle("Leadership focus on different topics compared to rank-and-file members") +
-  theme(plot.title.position = "plot"
-        , plot.title = element_text(hjust = 0.5))
-  
-
-  
-
-
-
-
-
-
 
 
 
@@ -1058,20 +832,32 @@ ggplot(freq.leaderrank.long
 # Transform score to make more readable (multiple by 100)
 dat_congressNets <-
   dat_congressNets %>% 
-  mutate(pr_100 = pagerank_REVERSE * 1000
-         , prDiff_100 = pagerank_DIFF * 1000
-         , eigen_100 = eigen * 1000)
-
-# Filter to just Dems and Repubs (remove one independent)
-dat_congressNets <- filter(dat_congressNets, party_code %in% c(100, 200))
+  mutate(revPageRank_1000 = pagerank_REVERSE * 1000
+         , revPageRank_1000_ln_scaled = pagerank_REVERSE_ln_scaled * 1000)
 
 
 
-####
-# Models
-####
+###################################################################
+# Prepare variables 
+###################################################################
 
-# Prepare variables
+
+# Factors - create
+tmp <- dat_congressNets %>% 
+  mutate(across(c(
+    ends_with("_member")
+    , ends_with("_taskforce")
+    , contains("leader")
+    )
+    , ~ factor(.x, levels = 0:1, labels = c("No", "Yes"))))
+  
+  across(ends_with("_member"), ~as.factor(.x, levels = 0:1, labels = c("No", "Yes")))
+ 
+mutate(across(v1:v2, ~ .x + n))               
+                
+iris %>%
+  group_by(Species) %>%
+  summarise(across(starts_with("Sepal"), ~ mean(.x, na.rm = TRUE)))
 
 # Set up all variables 
 vars0 <- with(dat_congressNets
@@ -1274,14 +1060,13 @@ texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
 
 
 
+
 ###############################################################################
 ###############################################################################
 # Chapter 2 - FREX stems tables
 ###############################################################################
 ###############################################################################
 
-library(knitr)
-library(kableExtra)
 
 # Create tables of topic names and labels
 
@@ -1334,7 +1119,261 @@ kable(select(topicNames_tab.D, -salient)
 
 
 
+####################################################
+# DESCRIPTIVE STATS - Appendix
+####################################################
 
+# # Distribution of pagerank scores
+# ggplot(dat_congressNets) +
+#   geom_boxplot(aes(pagerank_REVERSE)) +
+#   theme_minimal() +
+#   labs(x = "Reverse PageRank") +
+#   ggtitle("Distribution of Influence Scores")
+# 
+# # Distribution of relative pagerank scores
+# ggplot(dat_congressNets) +
+#   geom_boxplot(aes(pagerank_DIFF)) +
+#   theme_minimal() +
+#   labs(x = "Relative PageRank score") +
+#   ggtitle("Distribution of Relative PageRank scores")
+
+
+
+
+###########################################################################
+###########################################################################
+# Chapter 3: Topics by Predictor (seniority, leadership)
+# We can see that leadership and seniority talks about different topics
+# than rank-and-file and freshman
+###########################################################################
+###########################################################################
+
+########################
+# Press release frequency by party - ch2
+########################
+
+# # % of press releases by topic - R
+# freq.R <- topics_df.R %>%
+#   group_by(topicName) %>%
+#   summarise(cnt = n()) %>%
+#   mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+#   arrange(desc(freq)) %>%
+#   left_join(., topicNames.R
+#             , by = c("topicName")) %>% 
+#   filter(salient == 1) %>% 
+#   select(topicName, freq)
+# 
+# # % of press releases by topic - D
+# freq.D <- topics_df.D %>%
+#   group_by(topicName) %>%
+#   summarise(cnt = n()) %>%
+#   mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+#   arrange(desc(freq)) %>%
+#   left_join(., topicNames.D
+#             , by = c("topicName")) %>% 
+#   filter(salient == 1) %>% 
+#   select(topicName, freq)
+# 
+# # Full join
+# freq.both <- 
+#   full_join(freq.R, freq.D
+#             , by = "topicName") %>% 
+#   rename(freq.R = freq.x
+#          , freq.D = freq.y)
+# 
+# 
+# # Edit for figure
+# freq.both.edit <-
+#   freq.both %>% 
+#   mutate(freq.D = 100 * freq.D
+#          , freq.R = 100 * freq.R) %>% 
+#   mutate(freq.D = as.numeric(paste0("-", freq.D)))
+# 
+# # Pivot longer
+# freq.both.long <-
+#   pivot_longer(data = freq.both.edit
+#                , cols = c("freq.R", "freq.D")
+#                , names_to = "party"
+#                , names_prefix = "freq."
+#                , values_to = "freq")
+# 
+# #####
+# # Arranging for figure
+# ####
+# 
+# # Descending order for Dems
+# freq.both.long <-
+#   freq.both.long %>% 
+#   arrange(desc(freq), .by_group = TRUE)
+# 
+# # Get names to set the limits - Democrats (ascending order b/c negative)
+# dem.topic.limits <-
+#   freq.both.long %>% 
+#   filter(party == "D") %>% 
+#   filter(!is.na(freq)) %>% 
+#   arrange(freq) %>% 
+#   select(topicName) %>% 
+#   pull()
+# 
+# # Additional republican topics that Dems don't talk about (also ascending order)
+# party.topic.limits <-
+#   c(dem.topic.limits
+#     , "Law and order", "China", "Small business", "Public lands", "Human trafficking"
+#     , "Executive power", "Higher edu.", "Veterans' affairs", "Energy")
+# 
+# 
+# 
+# # Make party-topic figure
+# ggplot(freq.both.long, aes(
+#   y = factor(topicName)
+#   , x = freq
+#   , fill = factor(freq < 0)) # color dem and rep differently
+#   ) +
+#   geom_bar(stat = "identity", width = 0.8) +
+#   geom_vline(xintercept = 0) +
+#   theme_bw() +
+#   xlab("Dem                                                           Rep") +
+#   ylab("") +
+#   scale_x_continuous(breaks = c(-6, -3, 0, 3, 6), 
+#                      labels = paste0(c(6, 3, 0, 3, 6),"%")) +
+#   scale_y_discrete(limits = rev(party.topic.limits)) +
+#   scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red")) +
+#   ggtitle("Democrats and Republicans diverge in topic focus")
+# 
+# 
+# 
+# 
+# ##################
+# # Ch2: topic frequency by leadership role
+# #################
+# 
+# # Merge extra data that is already appended to the score df for regression
+# topics_dfExtra.D <-
+#   left_join(topics_df.D, scoreCongressNets_legCovs.D
+#             , by = c("member_id", "congress"))
+# 
+# topics_dfExtra.R <-
+#   left_join(topics_df.R, scoreCongressNets_legCovs.R
+#             , by = c("member_id", "congress"))
+# 
+# 
+# # Create separate leadership/rank-and-file freqs
+# 
+# leader.rankfile.freq.fns <- function(topics_dfExtra) {
+#   
+#   leadership <-
+#     topics_dfExtra %>%
+#     filter(party_leadership == 1) %>%
+#     filter(salient == 1) %>%
+#     group_by(topicName) %>%
+#     summarise(cnt = n()) %>%
+#     mutate(freq = round(cnt / sum(cnt), 3)
+#            , party_leadership = 1) %>%
+#     arrange(desc(freq)) %>%
+#     select(topicName, freq, party_leadership)
+#   
+#   rankfile <-
+#     topics_dfExtra %>%
+#     filter(party_leadership == 0) %>%
+#     filter(salient == 1) %>%
+#     group_by(topicName) %>%
+#     summarise(cnt = n()) %>%
+#     mutate(freq = round(cnt / sum(cnt), 3)
+#            , party_leadership = 0) %>%
+#     arrange(desc(freq)) %>%
+#     select(topicName, freq, party_leadership)
+#   
+#   # Join
+#   leaderandrank <-
+#     full_join(leadership, rankfile
+#               , by = "topicName") %>% 
+#     rename(freq.leader = freq.x
+#            , freq.rank = freq.y)
+#   
+#   
+#   # Pivot longer
+#   freq.leaderrank.long <-
+#     pivot_longer(data = leaderandrank
+#                  , cols = c("freq.leader", "freq.rank")
+#                  , names_to = "leadership"
+#                  , names_prefix = "freq."
+#                  , values_to = "freq") %>% 
+#     select(-c(party_leadership.x, party_leadership.y))
+#   
+#   # Turn into pcts 
+#   freq.leaderrank.long <-
+#     freq.leaderrank.long %>% 
+#     mutate(freq = 100 * freq)
+#   
+#   
+# } # End leader.rankfile.freq.fns
+# 
+# # Apply function
+# freq.leaderrank.R <- leader.rankfile.freq.fns(topics_dfExtra.R) %>% mutate(party = "R")
+# freq.leaderrank.D <- leader.rankfile.freq.fns(topics_dfExtra.D) %>% mutate(party = "D")
+# 
+# # Merge together
+# freq.leaderrank.all <- 
+#   full_join(freq.leaderrank.R
+#             , freq.leaderrank.D
+#             , by = c("topicName", "leadership")) %>% 
+#   rename(freq.R = freq.x
+#          , freq.D = freq.y)
+# 
+# # Turn Dem's into negative for now
+# freq.leaderrank.all <-
+#   freq.leaderrank.all %>% 
+#   mutate(freq.D = as.numeric(paste0("-", freq.D)))
+# 
+# # Pivot longer
+# freq.leaderrank.long <-
+#   freq.leaderrank.all %>% 
+#   pivot_longer(cols = c("freq.R", "freq.D")
+#                , names_to = "party"
+#                , names_prefix = "freq."
+#                , values_to = "freq") %>% 
+#   select(-c(party.x, party.y))
+# 
+# #############
+# # Leadership vs rank-and-file Figure (both parties) - Make
+# ############
+# 
+# # Unite leadership and party to create a new factor
+# freq.leaderrank.long <-
+#   tidyr::unite(freq.leaderrank.long, "role_party", leadership, party, remove = FALSE) %>% 
+#   mutate(role_party = factor(role_party, levels = c("rank_D", "rank_R", "leader_D", "leader_R"), ordered = TRUE))
+#          
+# 
+# ggplot(freq.leaderrank.long
+#        , aes(y = factor(topicName)
+#              , x = freq
+#              , group = factor(leadership))) +
+#   geom_bar(aes(fill = factor(role_party)
+#                , color = factor(role_party))
+#            , stat = "identity"
+#            , width = 0.6
+#            , position = "dodge") +
+#   theme_bw() +
+#   geom_vline(xintercept = 0) +
+#   scale_fill_manual(values = c("leader_R" = "dark red", "rank_R" = "#ffdadb"
+#                                , "leader_D" = "dark blue", "rank_D" = "light blue")
+#                     , name = ""
+#                     , labels = c("Rank-and-file (D)"
+#                                  , "Rank-and-file (R)"
+#                                  , "Leadership (D)"
+#                                  , "Leadership (R)")) +
+#   scale_color_manual(values = c("leader_R" = "dark red", "rank_R" = "dark red"
+#                                 , "leader_D" = "dark blue", "rank_D" = "dark blue")
+#                      , guide = "none") +
+#   scale_y_discrete(limits = rev(party.topic.limits)) +
+#   ylab("") +
+#   xlab("Dem                                                           Rep") +
+#   scale_x_continuous(breaks = c(-10, 0, 10), 
+#                      labels = paste0(c(10, 0, 10),"%")) +
+#   ggtitle("Leadership focus on different topics compared to rank-and-file members") +
+#   theme(plot.title.position = "plot"
+#         , plot.title = element_text(hjust = 0.5))
+#   
 
 
 
@@ -1679,8 +1718,12 @@ tkplot(
 # Topic Exploration - Plots
 ########################################################################
 ########################################################################
+# Ch2 - S-curves (all topics and example topic)
 
+
+#########################################################################
 # S-Curves
+#########################################################################
 
 # Start with a single topic - Dems talking about climate in 116th congress
 dem.climate.116 <- first.obs.D %>% 
@@ -1708,22 +1751,40 @@ topics_df.D %>%
   geom_density(aes(y = cumsum(after_stat(count))))
   stat_bin(aes(y=cumsum(after_stat(count))), geom="step")
 
-library(scales)
+
   
 topics_df.D %>% 
-  filter(congress == 115 & salient == 1) %>% 
+  filter(congress == 113 & salient == 1 & topicName != "COVID-19") %>% 
   # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
   ggplot(data = ., aes(x = date_pr)) +
   geom_step(aes(y = ..y..), stat = "ecdf") +
   scale_x_date(labels = scales::label_date_short()) +
-  facet_wrap(~topicName)
+  facet_wrap(~topicName) +
+  labs(x = "", y = "") +
+  # ggtitle("Diffusion of Democratic topics in the 113th Congress") +
+  theme_minimal() +
+  theme(panel.spacing.x = unit(6, "mm")) # prevent overlapping labels
+
+
+topics_df.R %>% 
+  filter(congress == 113 & salient == 1 & topicName != "COVID-19" & topicName != "Higher edu.") %>% 
+  # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
+  ggplot(data = ., aes(x = date_pr)) +
+  geom_step(aes(y = ..y..), stat = "ecdf") +
+  scale_x_date(labels = scales::label_date_short()) +
+  facet_wrap(~topicName) +
+  labs(x = "", y = "") +
+  # ggtitle("Diffusion of Republican topics in the 113th Congress") +
+  theme_minimal() +
+  theme(panel.spacing.x = unit(6, "mm")) # prevent overlapping labels
+
 
 ######
 # D & R s-curves of Immigration during 115th congress (first immigration ban signed Jan 2017)
 #####
 
 # Democrats
-dem.immi.115 <- 
+dem.immi.115 <-
   topics_df.D %>% 
   filter(congress == 115 & topicName == "Immigration") %>% 
   ggplot(data = ., aes(x = date_pr)) +
@@ -1748,7 +1809,9 @@ dem.immi.115 <-
   theme_minimal() +
   labs(x = "", y = "") +
   theme(axis.text.x.bottom = element_blank()) +
-  ggtitle("Democratic press releases X") # <- Trying to remove bottom x axis on Dem plot, and then put together with R. Then just write 
+  ggtitle("Democratic press releases") +
+  theme(plot.title = element_text(size = 11))
+  # <- Trying to remove bottom x axis on Dem plot, and then put together with R. Then just write 
 # caption about how it follows a common s-curve-ish. Say that a figure with all topics can be found in the appendix
 
 # Republicans
@@ -1759,14 +1822,17 @@ rep.immi.115 <- topics_df.R %>%
   scale_x_date(labels = scales::label_date_short()) +
   theme_minimal() +
   labs(x = "", y = "") +
-  ggtitle("Republican press releases")
+  ggtitle("Republican press releases") +
+  theme(plot.title = element_text(size = 11))
 
 ###
 # Put them together
 ###
 
 # Create title
-title.grob.immigration <- textGrob("Diffusion of immigration through members' press releases")
+title.grob.immigration <- textGrob("Cumulative communication of the topic \"Immigration\" during Trump's Muslim ban \n"
+                                   , gp = gpar(fontsize = 12))
+
 
 # Arrange grobs
 grid.arrange(arrangeGrob(dem.immi.115, rep.immi.115
@@ -1774,68 +1840,8 @@ grid.arrange(arrangeGrob(dem.immi.115, rep.immi.115
                          , top = title.grob.immigration))
 
 
-# ###
-# # Create "master" axis grobs
-# ###
-# 
-# # Master y axis
-# y.grobImprovement <- textGrob("Improvement", rot = 90)
-# 
-# # Master x axis
-# x.grobEdgeNum <- textGrob("Edge Number")
-# 
-# # Super axis - party
-# x.grobParty <- textGrob("Democrats                                  Republicans"
-#                         , gp = gpar(fontsize = 14, fontface = "bold"))
-# 
-# # Arrange axis grobs and plot objects
-# grid.arrange(arrangeGrob(impD113.pl, impR113.pl
-#                          , impD114.pl, impR114.pl
-#                          , impD115.pl, impR115.pl
-#                          , impD116.pl, impR116.pl
-#                          , ncol = 2
-#                          , left = y.grobImprovement, top = x.grobParty, bottom = x.grobEdgeNum))
-# 
-# 
-# 
-# 
-# ###################################
-# # Plot: p-value from the Vuong test associated with each edge addition
-# ###################################
-# # Create plot objects
-# vuongD113.pl <- plot(D113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "113th Congress")
-# vuongD114.pl <- plot(D114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "114th Congress")
-# vuongD115.pl <- plot(D115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "115th Congress")
-# vuongD116.pl <- plot(D116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = "116th Congress")
-# 
-# vuongR113.pl <- plot(R113.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
-# vuongR114.pl <- plot(R114.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
-# vuongR115.pl <- plot(R115.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
-# vuongR116.pl <- plot(R116.network, type = "p-value") + theme(axis.title = element_blank()) + labs(subtitle = " ")
-# 
-# ###
-# # Create "master" axis grobs
-# ###
-# 
-# # Master y axis
-# y.grobPValue <- textGrob("P-Value", rot = 90)
-# 
-# # Master x axis
-# x.grobEdgeNum <- textGrob("Edge Number")
-# 
-# # Super axis - party
-# x.grobParty <- textGrob("Democrats                                  Republicans"
-#                         , gp = gpar(fontsize = 14, fontface = "bold"))
-# 
-# # Arrange axis grobs and plot objects
-# grid.arrange(arrangeGrob(vuongD113.pl, vuongR113.pl
-#                          , vuongD114.pl, vuongR114.pl
-#                          , vuongD115.pl, vuongR115.pl
-#                          , vuongD116.pl, vuongR116.pl
-#                          , ncol = 2
-#                          , left = y.grobPValue, top = x.grobParty, bottom = x.grobEdgeNum))
-
-
+#########################################################################
+#########################################################################
 
 
 
@@ -1876,8 +1882,7 @@ topic12plot <-
 # Plot each topic and it's prevalence by time/date using ggplot
 
 # Pull out effects
-library(stminsights)
-gg.effects <- get_effects(estimates = fit.ee.date,
+gg.effects <- stminsights::get_effects(estimates = fit.ee.date,
                           variable = "datum",
                           type = "continuous")
 
@@ -2328,7 +2333,6 @@ ggplot(data = topics_df.D) +
 
 
 # Clean/organize table for publish
-library(huxtable)
 
 mostCommonFrames.hux <-
   mostCommonFrames.R %>% 
