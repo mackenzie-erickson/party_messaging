@@ -842,45 +842,25 @@ dat_congressNets <-
 ###################################################################
 
 
-# Factors - create
-tmp <- dat_congressNets %>% 
+# Factors - create and label Yes/No
+dat_congressNets <- dat_congressNets %>% 
   mutate(across(c(
     ends_with("_member")
     , ends_with("_taskforce")
     , contains("leader")
     )
-    , ~ factor(.x, levels = 0:1, labels = c("No", "Yes"))))
+    , ~ lfactors::lfactor(.x, levels = 0:1, labels = c("No", "Yes"))))
   
 
+# Factors - create and label other than yes/no
+dat_congressNets <- dat_congressNets %>% 
+  mutate(caucus_memer = lfactor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
+         , party_code = lfactor(party_code, levels = c(100, 200), labels = c("Democrat", "Republican"))
+         , gender = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
+         )
 
-# Set up all variables 
-vars0 <- with(dat_congressNets
-              , data.frame(
-                "PageRank" = pr_100
-                , "PageRank diff" = prDiff_100
-                , "Eigencentrality" = eigen_100
-                , "member_id" = member_id
-                , "Congress" = congress
-                , "Press release count" = numPR_total
-                , "Bills sponsored" = bills_sponsored
-                , "Bills cosponsored" = bills_cosponsored
-                , "Pct. votes with party" = votes_with_party_pct
-                , "Caucus member" = factor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
-                , "Speeches daily" = n_speeches_daily
-                , "Party" = factor(party_code, levels = c(100, 200), labels = c("Democrat", "Republican"))
-                , "NOMINATE Dim 1" = nominate_dim1
-                , "NOMINATE Dim 2" = nominate_dim2
-                , "Senioriy" = seniority
-                , "Gender" = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
-                , "White" = factor(white, levels = 0:1, labels = c("No", "Yes"))
-                , "Majority" = factor(majority_party, levels = 0:1, labels = c("No", "Yes"))
-                , "Party leadership" = factor(party_leadership, levels = 0:1, labels = c("No", "Yes"))
-                , "Committee leadership" = factor(committee_leadership, levels = 0:1, labels = c("No", "Yes"))
-                , "LES" = les
-                , "Unopposed" = factor(unopposed, levels = 0:1, labels = c("No", "Yes"))
-                ))
-                
 
+####### LEFT OFF HERE - data is ready to go; time set up regressions to test hypotheses
 
 
 ######
