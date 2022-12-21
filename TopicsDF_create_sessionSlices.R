@@ -1101,15 +1101,70 @@ kable(select(topicNames_tab.D, -salient)
 # ggplot(dat_congressNets) +
 #   geom_boxplot(aes(pagerank_REVERSE)) +
 #   theme_minimal() +
-#   labs(x = "Reverse PageRank") +
+#   labs(x = "PageRank influence score") +
 #   ggtitle("Distribution of Influence Scores")
 # 
-# # Distribution of relative pagerank scores
+# # Distribution of logged, scaled, pagerank scores
 # ggplot(dat_congressNets) +
-#   geom_boxplot(aes(pagerank_DIFF)) +
+#   geom_boxplot(aes(revPageRank_1000_ln_scaled)) +
 #   theme_minimal() +
-#   labs(x = "Relative PageRank score") +
-#   ggtitle("Distribution of Relative PageRank scores")
+#   labs(x = "PageRank influence score") +
+#   ggtitle("Distribution of Influence Scores")
+
+
+
+##########################################################################
+# Chapter 2: Table of influence scores - most and least
+##########################################################################
+
+# Create table data
+dat_congressNets %>% 
+  select(full_name, congress, party_atPR, pagerank_REVERSE) %>% 
+  arrange(desc(pagerank_REVERSE)) %>% 
+  write.csv("InfluenceScores.csv")
+
+
+
+
+#######
+# Psuedo-correlation test:
+# Are the people who are most influential in the 113th congress, also influential in successive congresses?
+######
+
+# People who are in all 4 congresses
+multicongressReps <- 
+  dat_congressNets %>% 
+  count(member_id) %>% 
+  filter(n == 4) %>% 
+  rename(n_congress = n)
+
+
+# People who are in all 4 congresses who are above the median in 113th congress
+majority_113 <-
+  dat_congressNets %>% 
+  filter(member_id %in% multicongressReps$member_id) %>% 
+  filter(congress == 113) %>% 
+  group_by(party_atPR) %>% 
+  filter(pagerank_REVERSE > median(pagerank_REVERSE)) %>% 
+  select(member_id, full_name, pagerank_REVERSE) %>% 
+  ungroup()
+
+# People in 4 congresses who are above the median in a given congress
+majority_median <-
+  dat_congressNets %>% 
+  filter(member_id %in% multicongressReps$member_id) %>% 
+  group_by(party_atPR, congress) %>% 
+  filter(pagerank_REVERSE > median(pagerank_REVERSE)) %>% 
+  select(member_id, full_name, congress, pagerank_REVERSE) %>% 
+  ungroup() %>% 
+  count(member_id) %>% 
+  rename(n_median = n)
+
+# Merge
+majority_median_merge<- left_join(majority_113, majority_median, by = "member_id")
+
+# How many other congresses were they above the majority in?
+prop.table(table(majority_median_merge$n_median))
 
 
 
