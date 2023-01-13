@@ -559,10 +559,7 @@ numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
     group_by(member_id, congress) %>% 
     count() %>% 
     rename(numPR_total = n) 
-  
-  numPR_total <-
-    numPR_total %>% 
-    mutate(numPR_total_ln = log(numPR_total))
+
   
   # Number of PRs (first.obs)
   numPR_firstObs <- 
@@ -571,9 +568,6 @@ numPR.fns <- function(topics.df, first.obs, score_congressNet.df) {
     count() %>% 
     rename(numPR_firstobs = n)
   
-  numPR_firstObs <-
-    numPR_firstObs %>% 
-    mutate(numPR_firstobs_ln = log(numPR_firstobs))
   
   # Merge together
   numPR.df <-
@@ -714,14 +708,38 @@ dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs
 
 
 
-
-
 ###############################################################
 # Clean up variables - scale, center, create dummies
 ###############################################################
 
 ###
-# 1. Change dummies/categories to factors for regression
+# 1. Member names - make pretty
+###
+dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
+
+
+###
+# 2. Party names - make pretty
+###
+# Remove party_code b/c it has missing values and no contradictions with party_atPR
+# Make new column with long-form name of party
+
+dat_congressNets <-
+  dat_congressNets %>% 
+  mutate(party_name = ifelse(party_atPR == "R", "Republican",
+                             ifelse(party_atPR == "D", "Democrat",
+                                    NA))) %>% 
+  select(-party_code)
+
+# 4. Create simplified race/ethnicity variable
+# To prevent curse of dimensionality (some party-congress combinations don't have all options)
+dat_congressNets <- dat_congressNets %>% 
+  mutate(race_ethnicity_simplified = 
+           ifelse((race_ethnicity == "Asian PI" | race_ethnicity == "Latino" | race_ethnicity == "Native Am")
+                  , "Other", race_ethnicity))
+
+###
+# 5. Change dummies/categories to factors for regression
 ###
 
 # Get names of columns with unique count of less than 4
@@ -731,12 +749,39 @@ factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) <
 dat_congressNets[ ,factor_col_names] <- lapply(dat_congressNets[ , factor_col_names] , factor)
 
 
+# Yes/No labels - caucus membership
+# (lfactor creates factors that can be referenced by either the label or the level)
+dat_congressNets <- dat_congressNets %>% 
+  mutate(across(c(
+    ends_with("_member")
+    , ends_with("_taskforce")
+    , contains("leader")
+  )
+  , ~ lfactors::lfactor(.x, levels = 0:1, labels = c("No", "Yes"))))
+
+
+# Other labels
+dat_congressNets <- dat_congressNets %>% 
+  mutate(#caucus_member = lfactor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
+          party_name = factor(party_atPR, levels = c("D", "R"), labels = c("Democrat", "Republican"))
+         , gender = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
+         , race_ethnicity_simplified = factor(race_ethnicity_simplified
+                  , levels = c("5", "2", "Other")
+                  , labels = c("White", "Black", "Other"))
+         , race_ethnicity = factor(race_ethnicity
+                                   , levels = c("White", "Black", "Latino", "Asian PI", "Native Am")
+                                   , labels = c("White", "Black", "Latino", "Asian PI", "Native Am"))
+  )
+
+
 
 ###
 # 2. Create folded nominate dim 1 score (extremism)
 ###
 dat_congressNets <- dat_congressNets %>% 
   mutate(fold_nominate = ifelse(nominate_dim1 < 0, nominate_dim1 * -1, nominate_dim1))
+
+
 
 # Remove already-scaled variables (going to scale myself)
 dat_congressNets <-
@@ -781,7 +826,7 @@ dat_congressNets <- dat_congressNets %>%
 numeric_cols <- dat_congressNets %>% 
   select(where(is.numeric)) %>% 
   select(-c(indx, congress, district_code, govtrack_id, speakerid
-            , born, died, party_code, proximity_to_floor_centroid
+            , born, died, proximity_to_floor_centroid
             , lag_proximity_to_floor_centroid
             , proximity_to_floor_centroid_zero_code_missingness
             , lag_proximity_to_floor_centroid_zero_code_missingness))
@@ -796,40 +841,10 @@ dat_congressNets <- dat_congressNets %>%
 
 
 
-
-
 ###
-# 5. Member names - make pretty
+# 7. PageRank - multiply both logged and raw by 1000
 ###
-dat_congressNets$bioname <- str_to_title(dat_congressNets$bioname)
-
-
-###
-# 6. Party names - make pretty
-###
-# Remove party_code b/c it has missing values and no contradictions with party_atPR
-# Make new column with long-form name of party
-
-dat_congressNets <-
-  dat_congressNets %>% 
-  mutate(party_name = ifelse(party_atPR == "R", "Republican",
-                             ifelse(party_atPR == "D", "Democrat",
-                                    NA)))
-  
-
-
-##########################################################################
-
-
-
-
-
-##########################################################
-# Regressions: 
-###########################################################
-
-
-# Transform score to make more readable (multiple by 100)
+# Transform score to make more readable (multiple by 1000)
 dat_congressNets <-
   dat_congressNets %>% 
   mutate(revPageRank_1000 = pagerank_REVERSE * 1000
@@ -837,27 +852,24 @@ dat_congressNets <-
 
 
 
-###################################################################
-# Prepare variables 
-###################################################################
+###
+# 8. Order column names alphabetically for simplicity
+###
+dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 
 
-# Factors - create and label Yes/No
-dat_congressNets <- dat_congressNets %>% 
-  mutate(across(c(
-    ends_with("_member")
-    , ends_with("_taskforce")
-    , contains("leader")
-    )
-    , ~ lfactors::lfactor(.x, levels = 0:1, labels = c("No", "Yes"))))
-  
 
-# Factors - create and label other than yes/no
-dat_congressNets <- dat_congressNets %>% 
-  mutate(caucus_memer = lfactor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
-         , party_code = lfactor(party_code, levels = c(100, 200), labels = c("Democrat", "Republican"))
-         , gender = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
-         )
+
+############# END - Clean Variables #################################
+
+
+
+
+
+
+
+
+
 
 
 ####### LEFT OFF HERE - data is ready to go; time set up regressions to test hypotheses
@@ -1025,6 +1037,7 @@ texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
        , custom.gof.rows = list("Random effects" = c("YES", "YES", "YES"))
        , float.pos = "h"
        )
+
 
 
 
