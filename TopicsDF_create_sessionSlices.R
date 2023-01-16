@@ -858,7 +858,7 @@ dat_congressNets <-
 dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 
 
-
+saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_13Jan"))
 
 ############# END - Clean Variables #################################
 
@@ -866,24 +866,100 @@ dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 
 
 
+##############################################################################
+##############################################################################
+# Hypothesis Tests
+##############################################################################
+##############################################################################
+
+# Load cleaned data
+dat_congressNets <- readRDS(paste0(getwd(), "/Data/dat_congressNets_13Jan"))
+
+###
+# Clean (move up)
+###
+
+# Vote pct - NAs were coded as zeros
+dat_congressNets <- dat_congressNets %>% 
+  mutate(votepct = ifelse(votepct == 0, NA, votepct))
+
+# Vote pct - scale with correct vote pct
+dat_congressNets <- dat_congressNets %>% 
+  mutate(votepct_scaled = scale(votepct, center = TRUE, scale = TRUE))
+     
+  
+
+# Create pdata.frame for plm FE package
+dat <- pdata.frame(
+  dat_congressNets
+  , index = c("member_id", "congress"))
+
+###
+# Details
+###
+# 1. All/most models have individual random effects to account for unobserved
+#     characteristics such as members' proclivity to discuss press releases with colleagues  
+
+
+###
+# Tests
+###
+# 1. Party leader hypothesis
+# 2. Extremists hypothesis
+# 3. Expertise hypothesis
+#     3a. Committee leader
+#     3b. LES
+#     3c. Caucus leader
+# 4. Moderates hypothesis
+# 5. Factions
+
+
+
+##############################################
+# 1. Party leader hypothesis
+##############################################
+
+# Simple model
+partyLeader.mod1 <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + majority_party
+        
+      , data = dat
+      , effect = "individual"
+      , model = "random"
+      , index = c("member_id", "congress")
+  )
+
+partyLeader.mod2 <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + majority_party
+      + party_name
+      
+      , data = dat
+      , effect = "individual"
+      , model = "random"
+      , index = c("member_id", "congress")
+  )
+
+partyLeader.mod3 <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + majority_party
+      + party_name 
+      + votepct_scaled
+      + 
+      
+      , data = dat
+      , effect = "individual"
+      , model = "random"
+      , index = c("member_id", "congress")
+  )
 
 
 
 
-
-
-####### LEFT OFF HERE - data is ready to go; time set up regressions to test hypotheses
-
-
-######
-# Panel data models
-######
-
-
-
-# Make pdata.frame
-vars0.pdf <- pdata.frame(vars0
-                         , index = c("member_id", "Congress"))
 
 
 
