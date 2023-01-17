@@ -858,7 +858,7 @@ dat_congressNets <-
 dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 
 
-saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_13Jan"))
+# saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_13Jan"))
 
 ############# END - Clean Variables #################################
 
@@ -873,7 +873,7 @@ saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_13Jan"))
 ##############################################################################
 
 # Load cleaned data
-dat_congressNets <- readRDS(paste0(getwd(), "/Data/dat_congressNets_13Jan"))
+# dat_congressNets <- readRDS(paste0(getwd(), "/Data/dat_congressNets_13Jan"))
 
 ###
 # Clean (move up)
@@ -886,13 +886,29 @@ dat_congressNets <- dat_congressNets %>%
 # Vote pct - scale with correct vote pct
 dat_congressNets <- dat_congressNets %>% 
   mutate(votepct_scaled = scale(votepct, center = TRUE, scale = TRUE))
-     
-  
+
+# Make caucus_leader variable
+dat_congressNets <- dat_congressNets %>% 
+  mutate(caucus_leader = ifelse(bdc_leader == "Yes" |
+                                  cpc_leader == "Yes" |
+                                  hfc_leader == "Yes" |
+                                  hlc_leader == "Yes" |
+                                  jd_leader == "Yes" |
+                                  ndc_leader == "Yes" |
+                                  pop_leader == "Yes" |
+                                  psc_leader == "Yes" |
+                                  rmsp_leader == "Yes" |
+                                  rsc_leader == "Yes" |
+                                  tea_leader == "Yes"
+                                , "Yes", "No"))
+
+
 
 # Create pdata.frame for plm FE package
 dat <- pdata.frame(
   dat_congressNets
-  , index = c("member_id", "congress"))
+  , index = c("member_id", "congress")
+  , drop.index = TRUE)
 
 ###
 # Details
@@ -914,26 +930,40 @@ dat <- pdata.frame(
 # 5. Factions
 
 
+# Unobserved heterogeneity
+library(gplots)
+plotmeans(pagerank_REVERSE_ln_scaled ~ congress, data = dat)
 
 ##############################################
 # 1. Party leader hypothesis
 ##############################################
 
-# Simple model
-partyLeader.mod1 <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      + majority_party
-        
-      , data = dat
-      , effect = "individual"
-      , model = "random"
-      , index = c("member_id", "congress")
-  )
 
-partyLeader.mod2 <- 
+
+
+###########################################################
+# Main models 
+###########################################################
+
+###
+# Main mod - all covariates
+###
+
+
+main.mod1 <- 
   plm(revPageRank_1000_ln_scaled ~
         party_leadership
+      + committee_leadership
+      + seniority
+      + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      + race_ethnicity
+      + gender
+      + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
       + majority_party
       + party_name
       
@@ -943,13 +973,57 @@ partyLeader.mod2 <-
       , index = c("member_id", "congress")
   )
 
-partyLeader.mod3 <- 
+# Summary - main model 1
+summary(main.mod1)
+
+
+##### Without random effects
+noRF.mod1 <- 
+  lm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + committee_leadership
+      + seniority
+      + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      + race_ethnicity
+      + gender
+      + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      + party_name
+      
+      , data = dat
+  )
+
+# Summary - main model 1
+summary(noRF.mod1)
+
+
+
+###
+# Main mod - reduced covariates
+###
+
+
+main.mod2 <- 
   plm(revPageRank_1000_ln_scaled ~
         party_leadership
-      + majority_party
-      + party_name 
+      # + committee_leadership
+      # + seniority
+      # + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
       + votepct_scaled
-      + 
+      # + race_ethnicity_simplified
+      # + gender
+      # + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      # + party_name
       
       , data = dat
       , effect = "individual"
@@ -958,164 +1032,207 @@ partyLeader.mod3 <-
   )
 
 
+# Summary - main model 2
+summary(main.mod2)
 
 
 
 
-
-# Simpler version of PageRank with random individual fixed effects
-plm.pr1 <- plm(PageRank ~ 
-                    Party.leadership 
-                 + Committee.leadership 
-                 # + Senioriy
-                 + NOMINATE.Dim.1 
-                 + LES
-                 + White 
-                 + Bills.sponsored 
-                 + Bills.cosponsored 
-                 + Pct..votes.with.party
-                 + Caucus.member
-                 + Gender 
-                 # + Press.release.count
-                 + Speeches.daily
-                 + Unopposed
-                 + Majority
-                 + Party
-                 , data = vars0
-                 , effect = "individual"
-                 , model = "random"
-                 , index = c("member_id", "Congress"))
-
-summary(plm.pr1)
-
-
-
+#########
+# Fixed effects
+#########
+fixedeffectsmod <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      # + committee_leadership
+      # + seniority
+      # + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      # + race_ethnicity_simplified
+      # + gender
+      # + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      # + party_name
+      
+      , data = dat
+      , model = "within"
+      # , effect = "time"
+      , index = c("member_id", "congress")
+  )
+summary(fixedeffectsmod)
 
 
-#####
-# Produce regression results
-####
+###########################################################
+# Separated by party
+###########################################################
 
-reg.results <- reg.funs(dat_congressNets)
+###
+# Republicans
+###
+republican.mod1 <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + committee_leadership
+      + seniority
+      + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      + race_ethnicity
+      + gender
+      + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      # + party_name
+      
+      , data = filter(dat, party_name == "Republican")
+      , effect = "individual"
+      , model = "random"
+      , index = c("member_id", "congress")
+  )
 
+# Summary - Republicans only
+summary(republican.mod1)
 
+###
+# Democrats
+###
+democrats.mod1 <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      + committee_leadership
+      + seniority
+      + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      + race_ethnicity
+      + gender
+      + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      # + party_name
+      
+      , data = filter(dat, party_name == "Democrat")
+      , effect = "individual"
+      , model = "random"
+      , index = c("member_id", "congress")
+  )
 
-# PageRank with all controls with random individual fixed effects
-plm.pr2 <- plm(PageRank ~ 
-                 Party.leadership 
-               + Committee.leadership 
-               + Senioriy
-               + NOMINATE.Dim.1 
-               + NOMINATE.Dim.2 
-               + LES
-               + White 
-               + Bills.sponsored 
-               + Bills.cosponsored 
-               + Pct..votes.with.party
-               + Caucus.member
-               + Gender 
-               + Press.release.count
-               + Speeches.daily
-               + Unopposed
-               + Majority
-               + Party
-               , data = vars0
-               , effect = "individual"
-               , model = "random"
-               , index = c("member_id", "Congress"))
-
-# Simpler version of Relative PageRank with random individual fixed effects
-plm.prRelative1 <- plm(PageRank.diff ~ 
-                 Party.leadership 
-               + Committee.leadership 
-               # + Senioriy
-               + NOMINATE.Dim.1 
-               + NOMINATE.Dim.2 
-               + LES
-               + White 
-               + Bills.sponsored 
-               + Bills.cosponsored 
-               + Pct..votes.with.party
-               + Caucus.member
-               + Gender 
-               # + Press.release.count
-               + Speeches.daily
-               + Unopposed
-               + Majority
-               + Party
-               , data = vars0
-               , effect = "individual"
-               , model = "random"
-               , index = c("member_id", "Congress"))
-
-# Relative PageRank with all controls with random individual fixed effects
-plm.prRelative2 <- plm(PageRank.diff ~ 
-                 Party.leadership 
-               + Committee.leadership 
-               + Senioriy
-               + NOMINATE.Dim.1 
-               + NOMINATE.Dim.2 
-               + LES
-               + White 
-               + Bills.sponsored 
-               + Bills.cosponsored 
-               + Pct..votes.with.party
-               + Caucus.member
-               + Gender 
-               + Press.release.count
-               + Speeches.daily
-               + Unopposed
-               + Majority
-               + Party
-               , data = vars0
-               , effect = "individual"
-               , model = "random"
-               , index = c("member_id", "Congress"))
+# Summary - Democrats only
+summary(democrats.mod1)
 
 
 
+ggplot(dat_congressNets) +
+  geom_density(aes(pagerank_REVERSE_ln_scaled, fill = party_leadership), alpha = 0.5, na.rm = TRUE)
 
+ggplot(dat_congressNets, aes(seniority, pagerank_REVERSE_ln_scaled)) +
+  geom_point() +
+  geom_smooth()
+
+
+numeric.corMat <- dat_congressNets %>% 
+  select(pagerank_REVERSE_ln_scaled, seniority_ln_scaled
+         , les_ln_scaled, leslag_ln_scaled
+         , fold_nominate_scaled, votepct_scaled
+         , bills_cosponsored_ln_scaled, bills_sponsored_ln_scaled
+         , n_speeches_daily_ln_scaled, numPR_total_scaled, numPR_firstobs_scaled
+         , votes_with_party_pct_ln_scaled
+  ) %>% as.matrix()
+
+cor(numeric.corMat, method = "pearson", use = "pairwise.complete.obs")
 
 
 
 #####################
 # Create LaTeX table
-texreg(l = list(plm.pr2, plm.prRelative2,  plm.eigen2)
+texreg(l = list(noRF.mod1, main.mod1, republican.mod1, democrats.mod1)
        
-       , custom.model.names = c("PageRank", "Relative PageRank", "Eigencentrality"),
+       , custom.model.names = c("Model 1", "Model 2", "Republicans", "Democrats"),
        custom.coef.map = list(
-         "Party.leadershipYes" = "Party leadership"
-         , "Committee.leadershipYes" = "Committee leadership"         
-         , "Senioriy" = "Seniority"         
-         , "NOMINATE.Dim.1" = "NOMINATE Dim1"
-         , "NOMINATE.Dim.2" = "NOMINATE Dim2"                    
-         , "LES" = "LES"               
-         , "WhiteYes" = "White"        
-         , "Bills.sponsored" = "Bills sponsored"      
-         , "Bills.cosponsored" = "Bills cosponsored"
-         , "Pct..votes.with.party" = "Votes w/ party pct."       
-         , "Caucus.memberYes" = "Caucus member"           
-         , "GenderFemale"  = "Female"   
-         , "Press.release.count" = "Press release count"         
-         , "Speeches.daily" = "Speeches daily"
-         , "UnopposedYes" = "Unopposed"            
-         , "MajorityYes" = "Majority"        
-         , "PartyRepublican" = "Republican"
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"         
+         , "seniority" = "Seniority"         
+         , "caucus_leaderYes" = "Caucus leader"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Folded NOMINATE"               
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"       
+         , "numPR_total_scaled" = "Total press releases"           
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"         
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican"            
+     
        )
        , bold = 0.05
        , stars = numeric(0)
        # , custom.note = "Table shows the effect of member characteristics on their
        # likelihood to be central to their party. All models include individual random effects
-       # to account for unobserved features such as a member's proclivity to discuss press releases with colleagues."
-       , caption = "Linear Models of Member Influence Scores"
+       # to account for unobserved features such as a member's proclivity to discuss press releases with colleagues.
+       # The dependent variable is log(PageRank), and it has multiplied by 1000 to increase legibility. Coefficients
+       # are bold at the 0.05 significance level."
+       , caption = "Linear Models of Member Influence"
        , caption.above = TRUE
-       , fontsize = "small"
-       , custom.gof.rows = list("Random effects" = c("YES", "YES", "YES"))
+       # , fontsize = "small"
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , custom.gof.rows = list("Individual random effects" = c("No", "Yes", "Yes", "Yes"))
        , float.pos = "h"
        )
 
 
 
+
+
+
+
+
+
+
+
+###############################################################################
+###############################################################################
+# Regression Trees
+###############################################################################
+###############################################################################
+
+library(caret)
+
+
+# Split into train/test
+set.seed(1992)
+trainIndex <- createDataPartition(dat_congressNets$pagerank_REVERSE_ln_scaled
+                                     , times = 1
+                                     , p = 0.7
+                                     , list = FALSE)
+dat.train <- dat_congressNets[trainIndex, ]
+dat.test <- dat_congressNets[-trainIndex, ]
+
+
+
+# Make a tree (Bagged)
+set.seed(825)
+tree.fit1 <- train(pagerank_REVERSE_ln_scaled ~ .
+                   , data = preProcess(dat.train, method = )
+                   , method = "AdaBag"
+                   , verbose = FALSE
+                   , maxdepth = 5
+                   )
 
 
 
