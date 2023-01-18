@@ -844,11 +844,11 @@ dat_congressNets <- dat_congressNets %>%
 ###
 # 7. PageRank - multiply both logged and raw by 1000
 ###
-# Transform score to make more readable (multiple by 1000)
+# Transform score to make more readable (multiple by 10)
 dat_congressNets <-
   dat_congressNets %>% 
-  mutate(revPageRank_1000 = pagerank_REVERSE * 1000
-         , revPageRank_1000_ln_scaled = pagerank_REVERSE_ln_scaled * 1000)
+  mutate(revPageRank_10 = pagerank_REVERSE * 10
+         , revPageRank_10_ln_scaled = pagerank_REVERSE_ln_scaled * 10)
 
 
 
@@ -902,10 +902,141 @@ dat_congressNets <- dat_congressNets %>%
                                   tea_leader == "Yes"
                                 , "Yes", "No"))
 
+#######################################################################
+#######################################################################
+# Machine Learning - lm() and AdaBoost trees
+#######################################################################
+#######################################################################
+
+# Trees for regression = Boosted Tree (method = 'blackboost')
+    # params: mstop (#Trees), maxdepth(Max tree depth)
+
+###
+# Prep data - lm
+###
+
+# Data I want
+mydata <- dat_congressNets %>% 
+  select(poc_man, poc_woman, white_man, white_woman, majority_committee_leadership
+         , minority_committee_leadership, majority_party_leadership, minority_party_leadership
+         , votes_against_party_pct_ln_scaled, numPR_total_scaled, numPR_firstobs_scaled
+         , n_speeches_daily_ln_scaled, bills_cosponsored_ln_scaled, bills_sponsored_ln_scaled
+         , race_ethnicity, votepct_scaled, fold_nominate_scaled, les_ln_scaled
+         , leslag_ln_scaled, majority_party, party_name, caucus_leader, caucus_member
+         , committee_leadership, party_leadership, seniority_ln_scaled, gender, revPageRank_10_ln_scaled)
+
+
+# Split
+set.seed(111)
+trainIndex <- createDataPartition(mydata$revPageRank_10_ln_scaled
+                                  , times = 1
+                                  , p = 0.7
+                                  , list = FALSE)
+datTrain <- mydata[trainIndex,]
+datTest <- mydata[-trainIndex,]
+
+# Set up LOOCV
+trControl <- trainControl(method = "LOOCV")
+
+
+# Train
+startTime <- Sys.time()
+set.seed(0529)
+mod <- train(revPageRank_10_ln_scaled ~ 
+               party_leadership
+             + committee_leadership
+             + seniority_ln_scaled
+             + caucus_leader
+             + les_ln_scaled
+             + fold_nominate_scaled
+             + votepct_scaled
+             + race_ethnicity
+             + gender
+             + bills_cosponsored_ln_scaled
+             + votes_against_party_pct_ln_scaled
+             + majority_party
+             + party_name
+             , method = "rpart"
+             , trControl = trainControl(method = "LOOCV")
+             , na.action = "na.rpart"
+             # , maxdepth = 6
+             # , mstop = 
+             , data = datTrain
+             , model = TRUE
+             )
+runTime <- Sys.time() - startTime
+
+library(rpart)
+library(rpart.plot)
+
+startTime <- Sys.time()
+set.seed(059)
+mod <- 
+  rpart::rpart(
+  revPageRank_10_ln_scaled ~ party_leadership
+  + committee_leadership
+  + seniority_ln_scaled
+  + caucus_leader
+  + les_ln_scaled
+  # + fold_nominate_scaled
+  + votepct_scaled
+  + race_ethnicity
+  + gender
+  + bills_cosponsored_ln_scaled
+  + votes_against_party_pct_ln_scaled
+  + majority_party
+  + party_name
+  , data = datTrain
+  # , na.action = "na.pass"
+  , control = rpart.control(xval = 1000)
+)
+Sys.time() - startTime
+
+rpart.plot(mod, type = 5)
+
+
+
+mod2 <- rpart(revPageRank_10_ln_scaled ~ .,
+              data = datTrain
+              , control = rpart.control(xval = 1000))
+
+
+
+# Make all numeric (remove one from each factor)
+dat.modelMatrix <- model.matrix(~ party_leadership
+                    + committee_leadership
+                    + seniority
+                    + caucus_leader
+                    #+ les_ln_scaled
+                    #+ fold_nominate_scaled
+                    #+ votepct_scaled
+                    + race_ethnicity
+                    + gender
+                    #+ numPR_total_scaled
+                    #+ bills_cosponsored_ln_scaled
+                    #+ votes_with_party_pct_ln_scaled
+                    + majority_party
+                    + party_name
+                   # + congress
+                    , data = dat_congressNets
+                   , na.action("na.pass"))
+
+revPageRank_10_ln_scaled 
+# Add on DV
+dat.modelMatrix[, pagerank10] <- dat_congressNets$revPageRank_10_ln_scaled
+dat.modelMatrix <- cbind(dat.modelMatrix, dat_congressNets$revPageRank_10_ln_scaled)
+
+
+# Partition data
+dat.lm.index <- createDataPartition(y = dat.modelMatrix[,"revPageRank_10_ln_scaled"]
+                                    , times = 1
+                                    , p = 0.8
+                                    , list = FALSE)
+
 
 
 # Create pdata.frame for plm FE package
-dat <- pdata.frame(
+dat.plm <- pdata.frame(
   dat_congressNets
   , index = c("member_id", "congress")
   , drop.index = TRUE)
@@ -951,7 +1082,7 @@ plotmeans(pagerank_REVERSE_ln_scaled ~ congress, data = dat)
 
 
 main.mod1 <- 
-  plm(revPageRank_1000_ln_scaled ~
+  plm(revPageRank_10_ln_scaled ~
         party_leadership
       + committee_leadership
       + seniority
@@ -1041,7 +1172,7 @@ summary(main.mod2)
 #########
 # Fixed effects
 #########
-fixedeffectsmod <- 
+fixedeffectsmod.indiv <- 
   plm(revPageRank_1000_ln_scaled ~
         party_leadership
       # + committee_leadership
@@ -1063,7 +1194,32 @@ fixedeffectsmod <-
       # , effect = "time"
       , index = c("member_id", "congress")
   )
-summary(fixedeffectsmod)
+summary(fixedeffectsmod.indiv)
+
+
+fixedeffectsmod.time <- 
+  plm(revPageRank_1000_ln_scaled ~
+        party_leadership
+      # + committee_leadership
+      # + seniority
+      # + caucus_leader
+      + les_ln_scaled
+      + fold_nominate_scaled
+      + votepct_scaled
+      # + race_ethnicity_simplified
+      # + gender
+      # + numPR_total_scaled
+      + bills_cosponsored_ln_scaled
+      + votes_with_party_pct_ln_scaled
+      + majority_party
+      # + party_name
+      
+      , data = dat
+      , model = "within"
+      , effect = "time"
+      , index = c("member_id", "congress")
+  )
+summary(fixedeffectsmod.time)
 
 
 ###########################################################
@@ -1196,12 +1352,47 @@ texreg(l = list(noRF.mod1, main.mod1, republican.mod1, democrats.mod1)
        )
 
 
+omit.coefs <- c(
+  # "party_leadershipYes"
+                  "committee_leadershipYes"        
+                 , "seniority"        
+                 , "caucus_leaderYes"
+                 , "les_ln_scaled"                  
+                 , "fold_nominate_scaled"              
+                 , "votepct_scaled"      
+                 , "race_ethnicityBlack" 
+                 , "race_ethnicityLatino"
+                 , "race_ethnicityAsian PI"
+                 , "race_ethnicityNative Am"
+                 , "genderFemale"      
+                 , "numPR_total_scaled"          
+                 , "bills_cosponsored_ln_scaled"  
+                 , "votes_with_party_pct_ln_scaled"         
+                 , "majority_party1"
+                 , "party_nameRepublican")
+
+models.all <- list(
+  "Big model" = main.mod1
+  , "Small model" = main.mod2
+  , "Fixed effects" = fixedeffectsmod
+  , "Democrats" = democrats.mod1
+  , "Republicans" = republican.mod1
+)
 
 
+modelsummary::modelplot(models.all, coef_map = "party_leadershipYes")
 
 
+# Fixed effects stuff
+fixef(fixedeffectsmod)
+summary(fixef(fixedeffectsmod)) -> tmp
+tmp2 <- as.data.frame(tmp)
+tmp2 <- tmp2 %>% rename(p = "Pr(>|t|)")
+tmp2 %>% filter(p < 0.05) %>% dim()
 
 
+timeFE.summary <- as.data.frame(
+  summary(fixef(fixedeffectsmod.time)))
 
 
 
