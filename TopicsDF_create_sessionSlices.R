@@ -776,10 +776,10 @@ dat_congressNets <- dat_congressNets %>%
 
 
 ###
-# 2. Create folded nominate dim 1 score (extremism)
+# 2. Create folded dw-nominate  score (extremism)
 ###
 dat_congressNets <- dat_congressNets %>% 
-  mutate(fold_nominate = ifelse(nominate_dim1 < 0, nominate_dim1 * -1, nominate_dim1))
+  mutate(fold_nominate = ifelse(dw_nominate < 0, dw_nominate * -1, dw_nominate))
 
 
 
@@ -902,154 +902,32 @@ dat_congressNets <- dat_congressNets %>%
                                   tea_leader == "Yes"
                                 , "Yes", "No"))
 
-#######################################################################
-#######################################################################
-# Machine Learning - lm() and AdaBoost trees
-#######################################################################
-#######################################################################
+# Make DV*10
+dat_congressNets <-
+  dat_congressNets %>% 
+  mutate(revPageRank_10 = pagerank_REVERSE * 10
+         , pagerank10 = pagerank_REVERSE_ln_scaled * 10)
+  
 
-# Trees for regression = Boosted Tree (method = 'blackboost')
-    # params: mstop (#Trees), maxdepth(Max tree depth)
 
 ###
-# Prep data - lm
+# Create data
 ###
 
-# Data I want
-mydata <- dat_congressNets %>% 
-  select(poc_man, poc_woman, white_man, white_woman, majority_committee_leadership
-         , minority_committee_leadership, majority_party_leadership, minority_party_leadership
-         , votes_against_party_pct_ln_scaled, numPR_total_scaled, numPR_firstobs_scaled
-         , n_speeches_daily_ln_scaled, bills_cosponsored_ln_scaled, bills_sponsored_ln_scaled
-         , race_ethnicity, votepct_scaled, fold_nominate_scaled, les_ln_scaled
-         , leslag_ln_scaled, majority_party, party_name, caucus_leader, caucus_member
-         , committee_leadership, party_leadership, seniority_ln_scaled, gender, revPageRank_10_ln_scaled)
+# OLS data
+dat.ols <- dat_congressNets
 
-
-# Split
-set.seed(111)
-trainIndex <- createDataPartition(mydata$revPageRank_10_ln_scaled
-                                  , times = 1
-                                  , p = 0.7
-                                  , list = FALSE)
-datTrain <- mydata[trainIndex,]
-datTest <- mydata[-trainIndex,]
-
-# Set up LOOCV
-trControl <- trainControl(method = "LOOCV")
-
-
-# Train
-startTime <- Sys.time()
-set.seed(0529)
-mod <- train(revPageRank_10_ln_scaled ~ 
-               party_leadership
-             + committee_leadership
-             + seniority_ln_scaled
-             + caucus_leader
-             + les_ln_scaled
-             + fold_nominate_scaled
-             + votepct_scaled
-             + race_ethnicity
-             + gender
-             + bills_cosponsored_ln_scaled
-             + votes_against_party_pct_ln_scaled
-             + majority_party
-             + party_name
-             , method = "rpart"
-             , trControl = trainControl(method = "LOOCV")
-             , na.action = "na.rpart"
-             # , maxdepth = 6
-             # , mstop = 
-             , data = datTrain
-             , model = TRUE
-             )
-runTime <- Sys.time() - startTime
-
-library(rpart)
-library(rpart.plot)
-
-startTime <- Sys.time()
-set.seed(059)
-mod <- 
-  rpart::rpart(
-  revPageRank_10_ln_scaled ~ party_leadership
-  + committee_leadership
-  + seniority_ln_scaled
-  + caucus_leader
-  + les_ln_scaled
-  # + fold_nominate_scaled
-  + votepct_scaled
-  + race_ethnicity
-  + gender
-  + bills_cosponsored_ln_scaled
-  + votes_against_party_pct_ln_scaled
-  + majority_party
-  + party_name
-  , data = datTrain
-  # , na.action = "na.pass"
-  , control = rpart.control(xval = 1000)
-)
-Sys.time() - startTime
-
-rpart.plot(mod, type = 5)
-
-
-
-mod2 <- rpart(revPageRank_10_ln_scaled ~ .,
-              data = datTrain
-              , control = rpart.control(xval = 1000))
-
-
-
-# Make all numeric (remove one from each factor)
-dat.modelMatrix <- model.matrix(~ party_leadership
-                    + committee_leadership
-                    + seniority
-                    + caucus_leader
-                    #+ les_ln_scaled
-                    #+ fold_nominate_scaled
-                    #+ votepct_scaled
-                    + race_ethnicity
-                    + gender
-                    #+ numPR_total_scaled
-                    #+ bills_cosponsored_ln_scaled
-                    #+ votes_with_party_pct_ln_scaled
-                    + majority_party
-                    + party_name
-                   # + congress
-                    , data = dat_congressNets
-                   , na.action("na.pass"))
-
-revPageRank_10_ln_scaled 
-# Add on DV
-dat.modelMatrix[, pagerank10] <- dat_congressNets$revPageRank_10_ln_scaled
-dat.modelMatrix <- cbind(dat.modelMatrix, dat_congressNets$revPageRank_10_ln_scaled)
-
-
-# Partition data
-dat.lm.index <- createDataPartition(y = dat.modelMatrix[,"revPageRank_10_ln_scaled"]
-                                    , times = 1
-                                    , p = 0.8
-                                    , list = FALSE)
-
-
-
-# Create pdata.frame for plm FE package
+# Panel data
 dat.plm <- pdata.frame(
   dat_congressNets
   , index = c("member_id", "congress")
   , drop.index = TRUE)
 
-###
-# Details
-###
-# 1. All/most models have individual random effects to account for unobserved
-#     characteristics such as members' proclivity to discuss press releases with colleagues  
+
 
 
 ###
-# Tests
+# Hypotheses
 ###
 # 1. Party leader hypothesis
 # 2. Extremists hypothesis
@@ -1061,51 +939,757 @@ dat.plm <- pdata.frame(
 # 5. Factions
 
 
-# Unobserved heterogeneity
-library(gplots)
-plotmeans(pagerank_REVERSE_ln_scaled ~ congress, data = dat)
 
-##############################################
-# 1. Party leader hypothesis
-##############################################
+###
+# Details
+###
+
+# b. OLS models
+  # i. No controls
+  # ii. Controls group
+  # iii. Controls group + PR count
+# c. Fixed effects models
+  # i. Congress fixed effects
+    # i. No controls
+   # ii. Controls group
+    # iii. Controls group + PR count
+  # ii. Member fixed effects
+    # i. No controls
+    # ii. Controls group
+    # iii. Controls group + PR count
+  # iii. Party fixed effects
+    # i. No controls
+    # ii. Controls group
+    # iii. Controls group + PR count
+# d. Random effects model
+  # i. Member random effects
+    # i. No controls
+    # ii. Controls group
+    # iii. Controls group + PR count
+# e. Sub-group models
+  # i. Democrats
+    # i. TBD
+  # ii. Republicans
+    # TBD
+
 
 
 
 
 ###########################################################
-# Main models 
+# OLS Models 
 ###########################################################
+
+###
+# 1. OLS - No Controls
+###
+ols.none <- lm(pagerank10 ~
+                 party_leadership
+               + committee_leadership
+               + caucus_leader
+               + seniority
+               + les_ln_scaled
+               + fold_nominate_scaled
+               
+               + majority_party
+               + party_name
+               , data = dat.ols)
+
+###
+# 2. OLS - Controls Group
+###
+ols.controls <- lm(pagerank10 ~
+                     party_leadership
+                   + committee_leadership
+                   + caucus_leader
+                   + seniority
+                   + les_ln_scaled
+                   + fold_nominate_scaled
+                   
+                   + majority_party
+                   + party_name
+                   
+                   # Controls group
+                   + votepct_scaled
+                   + race_ethnicity
+                   + gender
+                   + bills_cosponsored_ln_scaled
+                   + votes_with_party_pct_ln_scaled
+                   
+                   , data = dat.ols)
+
+###
+# 3. OLS - Controls group + PR count
+###
+ols.controlsExtra <- lm(pagerank10 ~
+                          party_leadership
+                        + committee_leadership
+                        + caucus_leader
+                        + seniority
+                        + les_ln_scaled
+                        + fold_nominate_scaled
+                        
+                        + majority_party
+                        + party_name
+                        
+                        # Controls group
+                        + votepct_scaled
+                        + race_ethnicity
+                        + gender
+                        + bills_cosponsored_ln_scaled
+                        + votes_with_party_pct_ln_scaled
+                        
+                        # Extra control
+                        + numPR_total_scaled
+                        
+                        , data = dat.ols)
+
+
+###########################################################
+# Fixed Effects Models 
+###########################################################
+
+#####################
+# Fixed Effects - Time
+####################
+
+###
+# 1. FE Time - No Controls
+###
+timeFE.none <- plm(pagerank10 ~
+                     party_leadership
+                   + committee_leadership
+                   + caucus_leader
+                   + seniority
+                   + les_ln_scaled
+                   + fold_nominate_scaled
+                   
+                   + majority_party
+                   + party_name
+                   
+                   , data = dat.plm
+                   , index = c("member_id", "congress")
+                   , model = "within"  
+                   , effect = "time")
+
+
+###
+# 2. FE Time - Controls Group
+###
+timeFE.controls <- plm(pagerank10 ~
+                         party_leadership
+                       + committee_leadership
+                       + caucus_leader
+                       + seniority
+                       + les_ln_scaled
+                       + fold_nominate_scaled
+                       
+                       + majority_party
+                       + party_name
+                       
+                       # Controls group
+                       + votepct_scaled
+                       + race_ethnicity
+                       + gender
+                       + bills_cosponsored_ln_scaled
+                       + votes_with_party_pct_ln_scaled
+                       
+                       , data = dat.plm
+                       , index = c("member_id", "congress")
+                       , model = "within"  
+                       , effect = "time")
+
+
+###
+# 3. FE Time - Controls group + PR count
+###
+timeFE.controlsExtra <- plm(pagerank10 ~
+                              party_leadership
+                            + committee_leadership
+                            + caucus_leader
+                            + seniority
+                            + les_ln_scaled
+                            + fold_nominate_scaled
+                            
+                            + majority_party
+                            + party_name
+                            
+                            # Controls group
+                            + votepct_scaled
+                            + race_ethnicity
+                            + gender
+                            + bills_cosponsored_ln_scaled
+                            + votes_with_party_pct_ln_scaled
+                            
+                            # Extra control
+                            + numPR_total_scaled
+                            
+                            , data = dat.plm
+                            , index = c("member_id", "congress")
+                            , model = "within"  
+                            , effect = "time")
+
+#####################
+# Fixed Effects - Individual 
+#####################
+
+###
+# 1. FE Indiv - No Controls
+###
+memberFE.none <- plm(pagerank10 ~
+                      party_leadership
+                    + committee_leadership
+                    + caucus_leader
+                    + seniority
+                    + les_ln_scaled
+                    + fold_nominate_scaled
+                    
+                    + majority_party
+                    + party_name
+                    
+                    , data = dat.plm
+                    , index = c("member_id", "congress")
+                    , model = "within"  
+                    , effect = "individual")
+
+
+###
+# 2. FE Indiv - Controls Group
+###
+memberFE.controls <- plm(pagerank10 ~
+                           party_leadership
+                         + committee_leadership
+                         + caucus_leader
+                         + seniority
+                         + les_ln_scaled
+                         + fold_nominate_scaled
+                         
+                         + majority_party
+                         + party_name
+                         
+                         # Controls group
+                         + votepct_scaled
+                         + race_ethnicity
+                         + gender
+                         + bills_cosponsored_ln_scaled
+                         + votes_with_party_pct_ln_scaled
+                         
+                         , data = dat.plm
+                         , index = c("member_id", "congress")
+                         , model = "within"  
+                         , effect = "individual")
+
+
+###
+# 3. FE Indiv - Controls group + PR count
+###
+memberFE.controlsExtra <- plm(pagerank10 ~
+                                party_leadership
+                              + committee_leadership
+                              + caucus_leader
+                              + seniority
+                              + les_ln_scaled
+                              + fold_nominate_scaled
+                              
+                              + majority_party
+                              + party_name
+                              
+                              # Controls group
+                              + votepct_scaled
+                              + race_ethnicity
+                              + gender
+                              + bills_cosponsored_ln_scaled
+                              + votes_with_party_pct_ln_scaled
+                              
+                              # Extra control
+                              + numPR_total_scaled
+                              
+                              , data = dat.plm
+                              , index = c("member_id", "congress")
+                              , model = "within"  
+                              , effect = "individual")
+
+#####################
+# Fixed Effects - Party
+#####################
+
+###
+# 1. Fixed Party - No Controls
+###
+partyFE.none <- lm(pagerank10 ~
+                      party_leadership
+                    + committee_leadership
+                    + caucus_leader
+                    + seniority
+                    + les_ln_scaled
+                    + fold_nominate_scaled
+                    + majority_party
+                      
+                      # Intercept
+                    + factor(party_name)
+                    
+                    , data = dat.ols)
+
+
+###
+# 2. Fixed Party - Controls Group
+###
+partyFE.controls <- lm(pagerank10 ~
+                         party_leadership
+                       + committee_leadership
+                       + caucus_leader
+                       + seniority
+                       + les_ln_scaled
+                       + fold_nominate_scaled
+                       + majority_party
+                       
+                       # Controls group
+                       + votepct_scaled
+                       + race_ethnicity
+                       + gender
+                       + bills_cosponsored_ln_scaled
+                       + votes_with_party_pct_ln_scaled
+                       
+                       # Intercept
+                       + factor(party_name)
+                       
+                       , data = dat.ols)
+
+
+###
+# 3. Fixed Party - Controls group + PR count
+###
+partyFE.controlsExtra <- lm(pagerank10 ~
+                              party_leadership
+                            + committee_leadership
+                            + caucus_leader
+                            + seniority
+                            + les_ln_scaled
+                            + fold_nominate_scaled
+                            + majority_party
+                            
+                            # Controls group
+                            + votepct_scaled
+                            + race_ethnicity
+                            + gender
+                            + bills_cosponsored_ln_scaled
+                            + votes_with_party_pct_ln_scaled
+                            
+                            # Extra control
+                            + numPR_total_scaled
+                            
+                            # Intercept
+                            + factor(party_name)
+                            
+                            , data = dat.ols)
+
+
+
+
+###########################################################
+# Random Effects Models 
+###########################################################
+
+###
+# 1. Random Indiv - No Controls
+###
+memberRE.none <- plm(pagerank10 ~
+                       party_leadership
+                     + committee_leadership
+                     + caucus_leader
+                     + seniority
+                     + les_ln_scaled
+                     + fold_nominate_scaled
+                     
+                     + majority_party
+                     + party_name
+                     
+                     , data = dat.plm
+                     , index = c("member_id", "congress")
+                     , model = "random"  
+                     , effect = "individual")
+
+
+###
+# 2. Random Indiv - Controls Group
+###
+memberRE.controls <- plm(pagerank10 ~
+                           party_leadership
+                         + committee_leadership
+                         + caucus_leader
+                         + seniority
+                         + les_ln_scaled
+                         + fold_nominate_scaled
+                         
+                         + majority_party
+                         + party_name
+                         
+                         # Controls group
+                         + votepct_scaled
+                         + race_ethnicity
+                         + gender
+                         + bills_cosponsored_ln_scaled
+                         + votes_with_party_pct_ln_scaled
+                         
+                         , data = dat.plm
+                         , index = c("member_id", "congress")
+                         , model = "random"  
+                         , effect = "individual")
+
+###
+# 3. Random Indiv - Controls group + PR count
+###
+memberRE.controlsExtra <- plm(pagerank10 ~
+                                party_leadership
+                              + committee_leadership
+                              + caucus_leader
+                              + seniority
+                              + les_ln_scaled
+                              + fold_nominate_scaled
+                              
+                              + majority_party
+                              + party_name
+                              
+                              # Controls group
+                              + votepct_scaled
+                              + race_ethnicity
+                              + gender
+                              + bills_cosponsored_ln_scaled
+                              + votes_with_party_pct_ln_scaled
+                              
+                              # Extra control
+                              + numPR_total_scaled
+                              
+                              , data = dat.plm
+                              , index = c("member_id", "congress")
+                              , model = "random"  
+                              , effect = "individual")
+
+
+###
+# List of models
+###
+modelList <- list(
+  ols_models = list(ols.none = ols.none, ols.controls = ols.controls, ols.controlsExtra = ols.controlsExtra)
+  , timeFE_models = list(timeFE.none = timeFE.none, timeFE.controls = timeFE.controls, timeFE.controlsExtra = timeFE.controlsExtra)
+  , memberFE_models = list(memberFE.none = memberFE.none, memberFE.controls = memberFE.controls, memberFE.controlsExtra = memberFE.controlsExtra)
+  , partyFE_models = list(partyFE.none = partyFE.none, partyFE.controls = partyFE.controls, partyFE.controlsExtra = partyFE.controlsExtra)
+  , memberRE_models = list(memberRE.none = memberRE.none, memberRE.controls = memberRE.controls, memberRE.controlsExtra = memberRE.controlsExtra)
+)
+
+
+##########################################################################
+##########################################################################
+# Grand Latex Tables - Appendix Chapter 3 (all models)
+##########################################################################
+##########################################################################
+
+#############################################################
+# OLS Models - Latex Tables
+#############################################################
+
+texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls, modelList$ols_models$ols.controlsExtra)
+       
+       , custom.model.names = c("Model 1", "Model 2", "Model 3"),
+       custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority" = "Seniority"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases"   
+         
+       )
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , caption = "OLS Models Accounting for Member Influence"
+       , label = "tab:appxOLS"
+       , float.pos = "h"
+)
+
+#############################################################
+# Fixed Effects - Latex Tables
+#############################################################
+
+##########
+# Time FE - Latex
+#########
+
+texreg(l = list(modelList$timeFE_models$timeFE.none, modelList$timeFE_models$timeFE.controls, modelList$timeFE_models$timeFE.controlsExtra)
+       
+       , custom.model.names = c("Model 1", "Model 2", "Model 3"),
+       custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority" = "Seniority"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases"   
+         
+       )
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , caption = "Time Fixed Effects Models Accounting for Member Influence"
+       , label = "tab:appxTimeFE"
+       , float.pos = "h"
+)
+
+##########
+# Member FE - Latex
+#########
+
+texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_models$memberFE.controls, modelList$memberFE_models$memberFE.controlsExtra)
+       
+       , custom.model.names = c("Model 1", "Model 2", "Model 3"),
+       custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority" = "Seniority"
+         , "les_ln_scaled" = "log(LES)"                    
+         # , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         # , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         # , "race_ethnicityBlack" = "Black"      
+         # , "race_ethnicityLatino" = "Latino"
+         # , "race_ethnicityAsian PI" = "Asian/PI"
+         # , "race_ethnicityNative Am" = "Native Am."
+         # , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases"   
+         
+       )
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , caption = "Individual Fixed Effects Models Accounting for Member Influence"
+       , label = "tab:appxMemberFE"
+       , float.pos = "h"
+)
+
+
+samp <- slice_sample(dat_congressNets, n=1) %>% select(member_id) %>% pull()
+dat_congressNets %>% filter(member_id == samp) %>% select(full_name, party_name, congress, nominate_dim1)
+
+
+##########
+# Party FE - Latex
+#########
+
+texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls, modelList$ols_models$ols.controlsExtra)
+       
+       , custom.model.names = c("Model 1", "Model 2", "Model 3"),
+       custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority" = "Seniority"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases"   
+         
+       )
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , caption = "Party Fixed Effects Models Accounting for Member Influence"
+       , label = "tab:appxPartyFE"
+       , float.pos = "h"
+)
+
+
+
+#############################################################
+# Random Effects - Latex Table
+#############################################################
+
+texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_models$memberRE.controls, modelList$memberRE_models$memberRE.controlsExtra)
+       
+       , custom.model.names = c("Model 1", "Model 2", "Model 3"),
+       custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority" = "Seniority"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases"   
+         
+       )
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = FALSE
+       , include.adjrs = FALSE
+       , include.rmse = FALSE
+       , include.variance = FALSE
+       , caption = "Individual Random Effects Models Accounting for Member Influence"
+       , label = "tab:appxRE"
+       , float.pos = "h"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#####################
+# Old/Testing models
+####################
+
+
+
 
 ###
 # Main mod - all covariates
 ###
 
 
-main.mod1 <- 
-  plm(revPageRank_10_ln_scaled ~
+random.indv <- 
+  plm(pagerank10 ~
         party_leadership
       + committee_leadership
       + seniority
       + caucus_leader
       + les_ln_scaled
       + fold_nominate_scaled
+     
+      + majority_party
+      + party_name
+      
       + votepct_scaled
       + race_ethnicity
       + gender
       + numPR_total_scaled
       + bills_cosponsored_ln_scaled
       + votes_with_party_pct_ln_scaled
-      + majority_party
-      + party_name
       
-      , data = dat
-      , effect = "individual"
-      , model = "random"
+      , data = datTrain
+      , effect = "time"
+      , model = "within"
       , index = c("member_id", "congress")
   )
 
 # Summary - main model 1
-summary(main.mod1)
+summary(random.indv)
+summary(test)
+
+# Testing whether FE with time is the same regardless of algo
+test <- lm(pagerank10 ~
+             party_leadership
+           + committee_leadership
+           + seniority
+           + caucus_leader
+           + les_ln_scaled
+           + fold_nominate_scaled
+           
+           + majority_party
+           + party_name
+           
+           # + votepct_scaled
+           # + race_ethnicity
+           # + gender
+           # + numPR_total_scaled
+           # + bills_cosponsored_ln_scaled
+           # + votes_with_party_pct_ln_scaled
+           
+           + factor(congress)
+           
+           , data = dat_congressNets)
+
+
+
+ggplot(dat_congressNets) +
+  geom_point(aes(y = pagerank10, x = majority_party, col = party_name), position = "jitter")
+
 
 
 ##### Without random effects
@@ -1255,6 +1839,12 @@ republican.mod1 <-
 # Summary - Republicans only
 summary(republican.mod1)
 
+controls <- c("race_ethnicity", "gender")
+
+               + numPR_total_scaled
+               + bills_cosponsored_ln_scaled
+               + votes_with_party_pct_ln_scaled)
+
 ###
 # Democrats
 ###
@@ -1267,15 +1857,16 @@ democrats.mod1 <-
       + les_ln_scaled
       + fold_nominate_scaled
       + votepct_scaled
-      + race_ethnicity
-      + gender
-      + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
+      # + race_ethnicity
+      # + gender
+      # + numPR_total_scaled
+      # + bills_cosponsored_ln_scaled
+      # + votes_with_party_pct_ln_scaled
       + majority_party
       # + party_name
+      + controls
       
-      , data = filter(dat, party_name == "Democrat")
+      , data = filter(dat_congressNets, party_name == "Democrat")
       , effect = "individual"
       , model = "random"
       , index = c("member_id", "congress")
@@ -1309,16 +1900,18 @@ cor(numeric.corMat, method = "pearson", use = "pairwise.complete.obs")
 
 #####################
 # Create LaTeX table
-texreg(l = list(noRF.mod1, main.mod1, republican.mod1, democrats.mod1)
+texreg(l = list(main.mod1, test)
        
-       , custom.model.names = c("Model 1", "Model 2", "Republicans", "Democrats"),
+       , custom.model.names = c("Model 1", "Model 2"),
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"         
          , "seniority" = "Seniority"         
          , "caucus_leaderYes" = "Caucus leader"
          , "les_ln_scaled" = "log(LES)"                    
-         , "fold_nominate_scaled" = "Folded NOMINATE"               
+         , "fold_nominate_scaled" = "Folded NOMINATE"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
          , "votepct_scaled" = "Win vote pct."        
          , "race_ethnicityBlack" = "Black"      
          , "race_ethnicityLatino" = "Latino"
@@ -1328,10 +1921,9 @@ texreg(l = list(noRF.mod1, main.mod1, republican.mod1, democrats.mod1)
          , "numPR_total_scaled" = "Total press releases"           
          , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
          , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"         
-         , "majority_party1" = "Majority party"
-         , "party_nameRepublican" = "Republican"            
-     
+                    
        )
+       , groups = list("\\textbf{Controls}" = 9:17)
        , bold = 0.05
        , stars = numeric(0)
        # , custom.note = "Table shows the effect of member characteristics on their
@@ -1347,7 +1939,7 @@ texreg(l = list(noRF.mod1, main.mod1, republican.mod1, democrats.mod1)
        , include.adjrs = FALSE
        , include.rmse = FALSE
        , include.variance = FALSE
-       , custom.gof.rows = list("Individual random effects" = c("No", "Yes", "Yes", "Yes"))
+       , custom.gof.rows = list("Individual random effects" = c("No", "Yes"))
        , float.pos = "h"
        )
 
