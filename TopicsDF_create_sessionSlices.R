@@ -16,7 +16,7 @@ packages <- c("NetworkInference", "tidyverse", "igraph", "ggplot2", "lubridate"
               , "stringr", "stm", "quanteda", "stminsights"
               , "texreg", "knitr", "kableExtra", "huxtable", "data.table"
               , "cowplot", "grid", "gridExtra", "egg", "scales"
-              , "plm", "lfactors")
+              , "plm", "lfactors", "gtsummary")
 
 # Install packages, if necessary
 new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
@@ -27,6 +27,7 @@ lapply(packages, require, character.only = TRUE)
 
 # Set working dir
 setwd("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Party_messaging")
+
 
 
 #################
@@ -706,11 +707,22 @@ scoreCongressNets_legCovs.D <-
 
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
 
+# Save
+# saveRDS(dat_congressNets, paste0(getwd(), "/Data/congressNets_immediatelyAfterMerge.RDS"))
+
+
+
+################## Ran code through here !!!!################
+# - Need to get rid of factors (or at least put them in a separate object)
+# - Remove factors(hopefully this doesn't mess up 1/0)
+# Double check with RE/FE that it has the same output 
 
 
 ###############################################################
 # Clean up variables - scale, center, create dummies
 ###############################################################
+
+# dat_congressNets <- readRDS(paste0(getwd(), "/Data/congressNets_immediatelyAfterMerge.RDS"))
 
 ###
 # 1. Member names - make pretty
@@ -731,52 +743,17 @@ dat_congressNets <-
                                     NA))) %>% 
   select(-party_code)
 
-# 4. Create simplified race/ethnicity variable
+# 3. Create simplified race/ethnicity variable
 # To prevent curse of dimensionality (some party-congress combinations don't have all options)
 dat_congressNets <- dat_congressNets %>% 
   mutate(race_ethnicity_simplified = 
            ifelse((race_ethnicity == "Asian PI" | race_ethnicity == "Latino" | race_ethnicity == "Native Am")
                   , "Other", race_ethnicity))
 
-###
-# 5. Change dummies/categories to factors for regression
-###
-
-# Get names of columns with unique count of less than 4
-factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) < 4)
-
-# Change to factor
-dat_congressNets[ ,factor_col_names] <- lapply(dat_congressNets[ , factor_col_names] , factor)
-
-
-# Yes/No labels - caucus membership
-# (lfactor creates factors that can be referenced by either the label or the level)
-dat_congressNets <- dat_congressNets %>% 
-  mutate(across(c(
-    ends_with("_member")
-    , ends_with("_taskforce")
-    , contains("leader")
-  )
-  , ~ lfactors::lfactor(.x, levels = 0:1, labels = c("No", "Yes"))))
-
-
-# Other labels
-dat_congressNets <- dat_congressNets %>% 
-  mutate(#caucus_member = lfactor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
-          party_name = factor(party_atPR, levels = c("D", "R"), labels = c("Democrat", "Republican"))
-         , gender = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
-         , race_ethnicity_simplified = factor(race_ethnicity_simplified
-                  , levels = c("5", "2", "Other")
-                  , labels = c("White", "Black", "Other"))
-         , race_ethnicity = factor(race_ethnicity
-                                   , levels = c("White", "Black", "Latino", "Asian PI", "Native Am")
-                                   , labels = c("White", "Black", "Latino", "Asian PI", "Native Am"))
-  )
-
 
 
 ###
-# 2. Create folded dw-nominate  score (extremism)
+# 4. Create folded dw-nominate  score (extremism)
 ###
 dat_congressNets <- dat_congressNets %>% 
   mutate(fold_nominate = ifelse(dw_nominate < 0, dw_nominate * -1, dw_nominate))
@@ -822,6 +799,9 @@ dat_congressNets <- dat_congressNets %>%
 # 4. Scale and center continuous variables
 ###
 
+# Get names of columns with unique count of less than 4 (factors; so they don't get scaled)
+factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) < 4)
+
 # Updated list of continuous vars (including new logged vars)
 numeric_cols <- dat_congressNets %>% 
   select(where(is.numeric)) %>% 
@@ -829,7 +809,8 @@ numeric_cols <- dat_congressNets %>%
             , born, died, proximity_to_floor_centroid
             , lag_proximity_to_floor_centroid
             , proximity_to_floor_centroid_zero_code_missingness
-            , lag_proximity_to_floor_centroid_zero_code_missingness))
+            , lag_proximity_to_floor_centroid_zero_code_missingness)) %>% 
+  select(-any_of(names(factor_col_names[factor_col_names == TRUE])))
 
 
 
@@ -838,11 +819,14 @@ dat_congressNets <- dat_congressNets %>%
                 , ~scale(.x, center = TRUE, scale = TRUE)
                 , .names ="{.col}_scaled"))
 
+dat_congressNets <- 
+  dat_congressNets %>%
+  mutate(fold_nominate_scaled = scale(fold_nominate, center = TRUE, scale = TRUE))
 
 
 
 ###
-# 7. PageRank - multiply both logged and raw by 1000
+# 7. PageRank - multiply both logged and raw by 10
 ###
 # Transform score to make more readable (multiple by 10)
 dat_congressNets <-
@@ -851,6 +835,29 @@ dat_congressNets <-
          , revPageRank_10_ln_scaled = pagerank_REVERSE_ln_scaled * 10)
 
 
+# Vote pct - NAs were coded as zeros
+dat_congressNets <- dat_congressNets %>% 
+  mutate(votepct = ifelse(votepct == 0, NA, votepct))
+
+# Vote pct - scale with correct vote pct
+dat_congressNets <- dat_congressNets %>% 
+  mutate(votepct_scaled = scale(votepct, center = TRUE, scale = TRUE))
+
+# Make caucus_leader variable
+dat_congressNets <- dat_congressNets %>% 
+  mutate(caucus_leader = ifelse(bdc_leader == 1 |
+                                  cpc_leader == 1 |
+                                  hfc_leader == 1 |
+                                  hlc_leader == 1 |
+                                  jd_leader == 1 |
+                                  ndc_leader == 1 |
+                                  pop_leader == 1 |
+                                  psc_leader == 1 |
+                                  rmsp_leader == 1 |
+                                  rsc_leader == 1 |
+                                  tea_leader == 1
+                                , 1, 0))
+
 
 ###
 # 8. Order column names alphabetically for simplicity
@@ -858,7 +865,53 @@ dat_congressNets <-
 dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 
 
-# saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_13Jan"))
+#######################################################################
+# No factors version - Save
+dat_congressNets_noFactors <- dat_congressNets
+# saveRDS(dat_congressNets_noFactors, paste0(getwd(), "/Data/dat_congressNets_noFactors_21Jan.RDS"))
+#######################################################################
+
+
+###
+# 5. Change dummies/categories to factors for regression
+###
+
+
+# Get names of columns with unique count of less than 4
+factor_col_names <- sapply(dat_congressNets, function(col) length(unique(col)) < 4)
+
+# Change to factor
+dat_congressNets[ ,factor_col_names] <- lapply(dat_congressNets[ , factor_col_names] , factor)
+
+
+# Yes/No labels - caucus membership
+# (lfactor creates factors that can be referenced by either the label or the level)
+dat_congressNets <- dat_congressNets %>% 
+  mutate(across(c(
+    ends_with("_member")
+    , ends_with("_taskforce")
+    , contains("leader")
+  )
+  , ~ lfactors::lfactor(.x, levels = 0:1, labels = c("No", "Yes"))))
+
+
+# Other labels
+dat_congressNets <- dat_congressNets %>% 
+  mutate(#caucus_member = lfactor(caucus_member, levels = 0:1, labels = c("No", "Yes"))
+    party_name = factor(party_atPR, levels = c("D", "R"), labels = c("Democrat", "Republican"))
+    , gender = factor(gender, levels = c("man", "woman"), labels = c("Male", "Female"))
+    , race_ethnicity_simplified = factor(race_ethnicity_simplified
+                                         , levels = c("5", "2", "Other")
+                                         , labels = c("White", "Black", "Other"))
+    , race_ethnicity = factor(race_ethnicity
+                              , levels = c("White", "Black", "Latino", "Asian PI", "Native Am")
+                              , labels = c("White", "Black", "Latino", "Asian PI", "Native Am"))
+  )
+
+
+
+
+# saveRDS(dat_congressNets, paste0(getwd(), "/Data/dat_congressNets_21Jan"))
 
 ############# END - Clean Variables #################################
 
@@ -872,41 +925,17 @@ dat_congressNets <- dat_congressNets[ , order(colnames(dat_congressNets))]
 ##############################################################################
 ##############################################################################
 
-# Load cleaned data
-# dat_congressNets <- readRDS(paste0(getwd(), "/Data/dat_congressNets_13Jan"))
+# Load cleaned data (with factors)
+dat_congressNets <- readRDS(paste0(getwd(), "/Data/dat_congressNets_21Jan"))
+# Load cleaned data without factors
+dat_congressNets_noFactors <- readRDS(paste0(getwd(), "/Data/dat_congressNets_noFactors_21Jan.RDS"))
 
-###
-# Clean (move up)
-###
 
-# Vote pct - NAs were coded as zeros
-dat_congressNets <- dat_congressNets %>% 
-  mutate(votepct = ifelse(votepct == 0, NA, votepct))
 
-# Vote pct - scale with correct vote pct
-dat_congressNets <- dat_congressNets %>% 
-  mutate(votepct_scaled = scale(votepct, center = TRUE, scale = TRUE))
-
-# Make caucus_leader variable
-dat_congressNets <- dat_congressNets %>% 
-  mutate(caucus_leader = ifelse(bdc_leader == "Yes" |
-                                  cpc_leader == "Yes" |
-                                  hfc_leader == "Yes" |
-                                  hlc_leader == "Yes" |
-                                  jd_leader == "Yes" |
-                                  ndc_leader == "Yes" |
-                                  pop_leader == "Yes" |
-                                  psc_leader == "Yes" |
-                                  rmsp_leader == "Yes" |
-                                  rsc_leader == "Yes" |
-                                  tea_leader == "Yes"
-                                , "Yes", "No"))
-
-# Make DV*10
+# Rename DV
 dat_congressNets <-
   dat_congressNets %>% 
-  mutate(revPageRank_10 = pagerank_REVERSE * 10
-         , pagerank10 = pagerank_REVERSE_ln_scaled * 10)
+  mutate(pagerank10 = pagerank_REVERSE_ln_scaled * 10)
   
 
 
@@ -987,7 +1016,7 @@ ols.none <- lm(pagerank10 ~
                  party_leadership
                + committee_leadership
                + caucus_leader
-               + seniority
+               + seniority_ln_scaled
                + les_ln_scaled
                + fold_nominate_scaled
                
@@ -1002,7 +1031,7 @@ ols.controls <- lm(pagerank10 ~
                      party_leadership
                    + committee_leadership
                    + caucus_leader
-                   + seniority
+                   + seniority_ln_scaled
                    + les_ln_scaled
                    + fold_nominate_scaled
                    
@@ -1018,6 +1047,8 @@ ols.controls <- lm(pagerank10 ~
                    
                    , data = dat.ols)
 
+
+
 ###
 # 3. OLS - Controls group + PR count
 ###
@@ -1025,7 +1056,7 @@ ols.controlsExtra <- lm(pagerank10 ~
                           party_leadership
                         + committee_leadership
                         + caucus_leader
-                        + seniority
+                        + seniority_ln_scaled
                         + les_ln_scaled
                         + fold_nominate_scaled
                         
@@ -1060,7 +1091,7 @@ timeFE.none <- plm(pagerank10 ~
                      party_leadership
                    + committee_leadership
                    + caucus_leader
-                   + seniority
+                   + seniority_ln_scaled
                    + les_ln_scaled
                    + fold_nominate_scaled
                    
@@ -1080,7 +1111,7 @@ timeFE.controls <- plm(pagerank10 ~
                          party_leadership
                        + committee_leadership
                        + caucus_leader
-                       + seniority
+                       + seniority_ln_scaled
                        + les_ln_scaled
                        + fold_nominate_scaled
                        
@@ -1107,7 +1138,7 @@ timeFE.controlsExtra <- plm(pagerank10 ~
                               party_leadership
                             + committee_leadership
                             + caucus_leader
-                            + seniority
+                            + seniority_ln_scaled
                             + les_ln_scaled
                             + fold_nominate_scaled
                             
@@ -1140,7 +1171,7 @@ memberFE.none <- plm(pagerank10 ~
                       party_leadership
                     + committee_leadership
                     + caucus_leader
-                    + seniority
+                    + seniority_ln_scaled
                     + les_ln_scaled
                     + fold_nominate_scaled
                     
@@ -1160,7 +1191,7 @@ memberFE.controls <- plm(pagerank10 ~
                            party_leadership
                          + committee_leadership
                          + caucus_leader
-                         + seniority
+                         + seniority_ln_scaled
                          + les_ln_scaled
                          + fold_nominate_scaled
                          
@@ -1187,7 +1218,7 @@ memberFE.controlsExtra <- plm(pagerank10 ~
                                 party_leadership
                               + committee_leadership
                               + caucus_leader
-                              + seniority
+                              + seniority_ln_scaled
                               + les_ln_scaled
                               + fold_nominate_scaled
                               
@@ -1220,7 +1251,7 @@ partyFE.none <- lm(pagerank10 ~
                       party_leadership
                     + committee_leadership
                     + caucus_leader
-                    + seniority
+                    + seniority_ln_scaled
                     + les_ln_scaled
                     + fold_nominate_scaled
                     + majority_party
@@ -1238,7 +1269,7 @@ partyFE.controls <- lm(pagerank10 ~
                          party_leadership
                        + committee_leadership
                        + caucus_leader
-                       + seniority
+                       + seniority_ln_scaled
                        + les_ln_scaled
                        + fold_nominate_scaled
                        + majority_party
@@ -1263,7 +1294,7 @@ partyFE.controlsExtra <- lm(pagerank10 ~
                               party_leadership
                             + committee_leadership
                             + caucus_leader
-                            + seniority
+                            + seniority_ln_scaled
                             + les_ln_scaled
                             + fold_nominate_scaled
                             + majority_party
@@ -1297,7 +1328,7 @@ memberRE.none <- plm(pagerank10 ~
                        party_leadership
                      + committee_leadership
                      + caucus_leader
-                     + seniority
+                     + seniority_ln_scaled
                      + les_ln_scaled
                      + fold_nominate_scaled
                      
@@ -1317,7 +1348,7 @@ memberRE.controls <- plm(pagerank10 ~
                            party_leadership
                          + committee_leadership
                          + caucus_leader
-                         + seniority
+                         + seniority_ln_scaled
                          + les_ln_scaled
                          + fold_nominate_scaled
                          
@@ -1343,7 +1374,7 @@ memberRE.controlsExtra <- plm(pagerank10 ~
                                 party_leadership
                               + committee_leadership
                               + caucus_leader
-                              + seniority
+                              + seniority_ln_scaled
                               + les_ln_scaled
                               + fold_nominate_scaled
                               
@@ -1395,7 +1426,7 @@ texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
          , "caucus_leaderYes" = "Caucus leader"
-         , "seniority" = "Seniority"
+         , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
          , "majority_party1" = "Majority party"
@@ -1441,7 +1472,7 @@ texreg(l = list(modelList$timeFE_models$timeFE.none, modelList$timeFE_models$tim
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
          , "caucus_leaderYes" = "Caucus leader"
-         , "seniority" = "Seniority"
+         , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
          , "majority_party1" = "Majority party"
@@ -1483,9 +1514,9 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
          , "caucus_leaderYes" = "Caucus leader"
-         , "seniority" = "Seniority"
+         , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
-         # , "fold_nominate_scaled" = "Extremism"    
+         , "fold_nominate_scaled" = "Extremism"
          , "majority_party1" = "Majority party"
          # , "party_nameRepublican" = "Republican" 
          
@@ -1501,7 +1532,7 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
          , "numPR_total_scaled" = "Total press releases"   
          
        )
-       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , groups = list("\\textbf{Member characteristics}" = 1:7, "\\textbf{Controls}" = 8:10, "\\textbf{Extra Control}" = 11)
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
@@ -1515,26 +1546,23 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
 )
 
 
-samp <- slice_sample(dat_congressNets, n=1) %>% select(member_id) %>% pull()
-dat_congressNets %>% filter(member_id == samp) %>% select(full_name, party_name, congress, nominate_dim1)
-
 
 ##########
 # Party FE - Latex
 #########
 
-texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls, modelList$ols_models$ols.controlsExtra)
+texreg(l = list(modelList$partyFE_models$partyFE.none, modelList$partyFE_models$partyFE.controls, modelList$partyFE_models$partyFE.controlsExtra)
        
        , custom.model.names = c("Model 1", "Model 2", "Model 3"),
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
          , "caucus_leaderYes" = "Caucus leader"
-         , "seniority" = "Seniority"
+         , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
          , "majority_party1" = "Majority party"
-         , "party_nameRepublican" = "Republican" 
+         # , "party_nameRepublican" = "Republican" 
          
          , "votepct_scaled" = "Win vote pct."        
          , "race_ethnicityBlack" = "Black"      
@@ -1548,7 +1576,7 @@ texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls
          , "numPR_total_scaled" = "Total press releases"   
          
        )
-       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , groups = list("\\textbf{Member characteristics}" = 1:7, "\\textbf{Controls}" = 8:15, "\\textbf{Extra Control}" = 16)
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
@@ -1574,7 +1602,7 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
          , "caucus_leaderYes" = "Caucus leader"
-         , "seniority" = "Seniority"
+         , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
          , "majority_party1" = "Majority party"
@@ -1621,401 +1649,173 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
 
 
 
-#####################
-# Old/Testing models
-####################
 
 
 
 
-###
-# Main mod - all covariates
-###
-
-
-random.indv <- 
-  plm(pagerank10 ~
-        party_leadership
-      + committee_leadership
-      + seniority
-      + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-     
-      + majority_party
-      + party_name
-      
-      + votepct_scaled
-      + race_ethnicity
-      + gender
-      + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      
-      , data = datTrain
-      , effect = "time"
-      , model = "within"
-      , index = c("member_id", "congress")
-  )
-
-# Summary - main model 1
-summary(random.indv)
-summary(test)
-
-# Testing whether FE with time is the same regardless of algo
-test <- lm(pagerank10 ~
-             party_leadership
-           + committee_leadership
-           + seniority
-           + caucus_leader
-           + les_ln_scaled
-           + fold_nominate_scaled
-           
-           + majority_party
-           + party_name
-           
-           # + votepct_scaled
-           # + race_ethnicity
-           # + gender
-           # + numPR_total_scaled
-           # + bills_cosponsored_ln_scaled
-           # + votes_with_party_pct_ln_scaled
-           
-           + factor(congress)
-           
-           , data = dat_congressNets)
-
-
-
-ggplot(dat_congressNets) +
-  geom_point(aes(y = pagerank10, x = majority_party, col = party_name), position = "jitter")
-
-
-
-##### Without random effects
-noRF.mod1 <- 
-  lm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      + committee_leadership
-      + seniority
-      + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      + race_ethnicity
-      + gender
-      + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      + majority_party
-      + party_name
-      
-      , data = dat
-  )
-
-# Summary - main model 1
-summary(noRF.mod1)
-
-
+#############################################################
+#############################################################
+# Coefficient Visualizations - Hypothesis tests
+# Plotting main variable coefficients, from all models
+#############################################################
+#############################################################
 
 ###
-# Main mod - reduced covariates
+# Hypotheses
 ###
-
-
-main.mod2 <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      # + committee_leadership
-      # + seniority
-      # + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      # + race_ethnicity_simplified
-      # + gender
-      # + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      + majority_party
-      # + party_name
-      
-      , data = dat
-      , effect = "individual"
-      , model = "random"
-      , index = c("member_id", "congress")
-  )
-
-
-# Summary - main model 2
-summary(main.mod2)
+# 1. Party leader hypothesis
+# 2. Extremists hypothesis
+# 3. Expertise hypothesis
+#     3a. Committee leader
+#     3b. LES
+#     3c. Caucus leader
+# 4. Moderates hypothesis
+# 5. Factions
 
 
 
 
-#########
-# Fixed effects
-#########
-fixedeffectsmod.indiv <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      # + committee_leadership
-      # + seniority
-      # + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      # + race_ethnicity_simplified
-      # + gender
-      # + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      + majority_party
-      # + party_name
-      
-      , data = dat
-      , model = "within"
-      # , effect = "time"
-      , index = c("member_id", "congress")
-  )
-summary(fixedeffectsmod.indiv)
+####
+# Party Leader
+####
 
-
-fixedeffectsmod.time <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      # + committee_leadership
-      # + seniority
-      # + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      # + race_ethnicity_simplified
-      # + gender
-      # + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      + majority_party
-      # + party_name
-      
-      , data = dat
-      , model = "within"
-      , effect = "time"
-      , index = c("member_id", "congress")
-  )
-summary(fixedeffectsmod.time)
-
-
-###########################################################
-# Separated by party
-###########################################################
-
-###
-# Republicans
-###
-republican.mod1 <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      + committee_leadership
-      + seniority
-      + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      + race_ethnicity
-      + gender
-      + numPR_total_scaled
-      + bills_cosponsored_ln_scaled
-      + votes_with_party_pct_ln_scaled
-      + majority_party
-      # + party_name
-      
-      , data = filter(dat, party_name == "Republican")
-      , effect = "individual"
-      , model = "random"
-      , index = c("member_id", "congress")
-  )
-
-# Summary - Republicans only
-summary(republican.mod1)
-
-controls <- c("race_ethnicity", "gender")
-
-               + numPR_total_scaled
-               + bills_cosponsored_ln_scaled
-               + votes_with_party_pct_ln_scaled)
-
-###
-# Democrats
-###
-democrats.mod1 <- 
-  plm(revPageRank_1000_ln_scaled ~
-        party_leadership
-      + committee_leadership
-      + seniority
-      + caucus_leader
-      + les_ln_scaled
-      + fold_nominate_scaled
-      + votepct_scaled
-      # + race_ethnicity
-      # + gender
-      # + numPR_total_scaled
-      # + bills_cosponsored_ln_scaled
-      # + votes_with_party_pct_ln_scaled
-      + majority_party
-      # + party_name
-      + controls
-      
-      , data = filter(dat_congressNets, party_name == "Democrat")
-      , effect = "individual"
-      , model = "random"
-      , index = c("member_id", "congress")
-  )
-
-# Summary - Democrats only
-summary(democrats.mod1)
-
-
-
-ggplot(dat_congressNets) +
-  geom_density(aes(pagerank_REVERSE_ln_scaled, fill = party_leadership), alpha = 0.5, na.rm = TRUE)
-
-ggplot(dat_congressNets, aes(seniority, pagerank_REVERSE_ln_scaled)) +
-  geom_point() +
-  geom_smooth()
-
-
-numeric.corMat <- dat_congressNets %>% 
-  select(pagerank_REVERSE_ln_scaled, seniority_ln_scaled
-         , les_ln_scaled, leslag_ln_scaled
-         , fold_nominate_scaled, votepct_scaled
-         , bills_cosponsored_ln_scaled, bills_sponsored_ln_scaled
-         , n_speeches_daily_ln_scaled, numPR_total_scaled, numPR_firstobs_scaled
-         , votes_with_party_pct_ln_scaled
-  ) %>% as.matrix()
-
-cor(numeric.corMat, method = "pearson", use = "pairwise.complete.obs")
-
-
-
-#####################
-# Create LaTeX table
-texreg(l = list(main.mod1, test)
-       
-       , custom.model.names = c("Model 1", "Model 2"),
-       custom.coef.map = list(
-         "party_leadershipYes" = "Party leadership"
-         , "committee_leadershipYes" = "Committee leadership"         
-         , "seniority" = "Seniority"         
-         , "caucus_leaderYes" = "Caucus leader"
-         , "les_ln_scaled" = "log(LES)"                    
-         , "fold_nominate_scaled" = "Folded NOMINATE"    
-         , "majority_party1" = "Majority party"
-         , "party_nameRepublican" = "Republican" 
-         , "votepct_scaled" = "Win vote pct."        
-         , "race_ethnicityBlack" = "Black"      
-         , "race_ethnicityLatino" = "Latino"
-         , "race_ethnicityAsian PI" = "Asian/PI"
-         , "race_ethnicityNative Am" = "Native Am."
-         , "genderFemale" = "Female"       
-         , "numPR_total_scaled" = "Total press releases"           
-         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
-         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"         
-                    
-       )
-       , groups = list("\\textbf{Controls}" = 9:17)
-       , bold = 0.05
-       , stars = numeric(0)
-       # , custom.note = "Table shows the effect of member characteristics on their
-       # likelihood to be central to their party. All models include individual random effects
-       # to account for unobserved features such as a member's proclivity to discuss press releases with colleagues.
-       # The dependent variable is log(PageRank), and it has multiplied by 1000 to increase legibility. Coefficients
-       # are bold at the 0.05 significance level."
-       , caption = "Linear Models of Member Influence"
-       , caption.above = TRUE
-       # , fontsize = "small"
-       , scalebox = 1.0
-       , include.rsquared = FALSE
-       , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
-       , custom.gof.rows = list("Individual random effects" = c("No", "Yes"))
-       , float.pos = "h"
-       )
-
-
-omit.coefs <- c(
-  # "party_leadershipYes"
-                  "committee_leadershipYes"        
-                 , "seniority"        
-                 , "caucus_leaderYes"
-                 , "les_ln_scaled"                  
-                 , "fold_nominate_scaled"              
-                 , "votepct_scaled"      
-                 , "race_ethnicityBlack" 
-                 , "race_ethnicityLatino"
-                 , "race_ethnicityAsian PI"
-                 , "race_ethnicityNative Am"
-                 , "genderFemale"      
-                 , "numPR_total_scaled"          
-                 , "bills_cosponsored_ln_scaled"  
-                 , "votes_with_party_pct_ln_scaled"         
-                 , "majority_party1"
-                 , "party_nameRepublican")
-
+# Name the models
 models.all <- list(
-  "Big model" = main.mod1
-  , "Small model" = main.mod2
-  , "Fixed effects" = fixedeffectsmod
-  , "Democrats" = democrats.mod1
-  , "Republicans" = republican.mod1
+    "OLS" = ols.none
+  , "OLS + Controls" = ols.controls
+  , "OLS + Extra controls" = ols.controlsExtra
+  , "Time FE" = timeFE.none
+  , "Time FE + Controls" = timeFE.controls
+  , "Time FE + Extra controls" = timeFE.controlsExtra
+  , "Indiv. FE" = memberFE.none
+  , "Indiv. FE + Controls" = memberFE.controls
+  , "Indiv. FE + Extra controls" = memberFE.controlsExtra
+  , "Party FE" = partyFE.none
+  , "Party FE + Controls" = partyFE.controls
+  , "Party FE + Extra controls" = partyFE.controlsExtra
+  , "Indiv. RE" = memberRE.none
+  , "Indiv. RE + Controls" = memberRE.controls
+  , "Indiv. RE + Extra controls" = memberRE.controlsExtra
 )
 
 
-modelsummary::modelplot(models.all, coef_map = "party_leadershipYes")
+###
+# Party leadership
+###
+# Map to a figure
+fig.partyLeadership <- modelsummary::modelplot(rev(models.all), coef_map = c("party_leadershipYes" = ""))
+
+# Make pretty
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_partyLeadership.pdf")
+fig.partyLeadership +
+  ggtitle("Party Leadership Association with Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
 
 
-# Fixed effects stuff
-fixef(fixedeffectsmod)
-summary(fixef(fixedeffectsmod)) -> tmp
-tmp2 <- as.data.frame(tmp)
-tmp2 <- tmp2 %>% rename(p = "Pr(>|t|)")
-tmp2 %>% filter(p < 0.05) %>% dim()
+###
+# Seniority
+###
+fig.seniority <- modelsummary::modelplot(rev(models.all), coef_map = c("seniority_ln_scaled" = ""))
+
+# Make pretty
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_seniority.pdf")
+fig.seniority +
+  ggtitle("Association between Seniority and Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
 
 
-timeFE.summary <- as.data.frame(
-  summary(fixef(fixedeffectsmod.time)))
+###
+# Extremism
+###
+
+# Map to a figure
+fig.extremism <- modelsummary::modelplot(rev(models.all), coef_map = c("fold_nominate_scaled" = ""))
+
+# Make pretty
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_extremism.pdf")
+fig.extremism +
+  ggtitle("Association between Extremism and Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
+
+
+##########
+# Expertise - multiple variables
+#########
+
+
+# Expertise 1: Committee Leadership
+
+fig.committeeLeadership <- modelsummary::modelplot(rev(models.all), coef_map = c("committee_leadershipYes" = ""))
+
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_committeeLeadership.pdf")
+fig.committeeLeadership +
+  ggtitle("Committee Leadership Association with Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
+
+# Expertise 2: LES
+fig.LES <- modelsummary::modelplot(rev(models.all), coef_map = c("les_ln_scaled" = ""))
+
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_LES.pdf")
+fig.LES +
+  ggtitle("Association between Legislative Effectiveness and Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
+
+# Expertise 3: Caucus leadership
+fig.caucusLeader <- modelsummary::modelplot(rev(models.all), coef_map = c("caucus_leaderYes" = ""))
+
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_caucusLeader.pdf")
+fig.caucusLeader +
+  ggtitle("Caucus Leadership Association with Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
+dev.off()
 
 
 
-###############################################################################
-###############################################################################
-# Regression Trees
-###############################################################################
-###############################################################################
-
-library(caret)
-
-
-# Split into train/test
-set.seed(1992)
-trainIndex <- createDataPartition(dat_congressNets$pagerank_REVERSE_ln_scaled
-                                     , times = 1
-                                     , p = 0.7
-                                     , list = FALSE)
-dat.train <- dat_congressNets[trainIndex, ]
-dat.test <- dat_congressNets[-trainIndex, ]
+fig.majority <- modelsummary::modelplot(rev(models.all), coef_map = c("majority_party1" = ""))
+fig.majority +
+  ggtitle("Majority Party Association with Influence") +
+  geom_vline(xintercept = 0) +
+  guides(color = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = unname(pals::alphabet(n = 15)))
 
 
 
-# Make a tree (Bagged)
-set.seed(825)
-tree.fit1 <- train(pagerank_REVERSE_ln_scaled ~ .
-                   , data = preProcess(dat.train, method = )
-                   , method = "AdaBag"
-                   , verbose = FALSE
-                   , maxdepth = 5
-                   )
+
+##############################################################
+# Appendix Chapter 3: Summary Tables (maybe for body)
+# Add column for # of people who changed status
+
+
+########
+# Detect number of people who changed status (e.g. did they go from committee -> not)
+########
+changeStatus.fns <- function(dat, x){
+  out <- dat %>%
+    group_by(member_id) %>% 
+    mutate(change = ifelse(n_distinct(.$x, na.rm = TRUE) == 1, 0, 1)) %>% 
+    select(change)
+  return(out)
+} 
+
+
+
 
 
 
