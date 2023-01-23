@@ -1448,10 +1448,8 @@ texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
-       , include.rsquared = FALSE
+       , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
        , caption = "OLS Models Accounting for Member Influence"
        , label = "tab:appxOLS"
        , float.pos = "h"
@@ -1494,10 +1492,8 @@ texreg(l = list(modelList$timeFE_models$timeFE.none, modelList$timeFE_models$tim
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
-       , include.rsquared = FALSE
+       , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
        , caption = "Time Fixed Effects Models Accounting for Member Influence"
        , label = "tab:appxTimeFE"
        , float.pos = "h"
@@ -1536,10 +1532,8 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
-       , include.rsquared = FALSE
+       , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
        , caption = "Individual Fixed Effects Models Accounting for Member Influence"
        , label = "tab:appxMemberFE"
        , float.pos = "h"
@@ -1580,10 +1574,8 @@ texreg(l = list(modelList$partyFE_models$partyFE.none, modelList$partyFE_models$
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
-       , include.rsquared = FALSE
+       , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
        , caption = "Party Fixed Effects Models Accounting for Member Influence"
        , label = "tab:appxPartyFE"
        , float.pos = "h"
@@ -1624,12 +1616,62 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
        , bold = 0.05
        , stars = numeric(0)
        , scalebox = 1.0
-       , include.rsquared = FALSE
+       , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , include.rmse = FALSE
-       , include.variance = FALSE
        , caption = "Individual Random Effects Models Accounting for Member Influence"
        , label = "tab:appxRE"
+       , float.pos = "h"
+)
+
+
+
+
+#############################################################
+#############################################################
+# Main models - latex table
+# Selection of illustrative models 
+#############################################################
+#############################################################
+
+
+texreg(l = list(
+  modelList$ols_models$ols.none
+  , modelList$memberFE_models$memberFE.controls
+  , modelList$partyFE_models$partyFE.controls
+  , modelList$ols_models$ols.controlsExtra)
+  , custom.model.names = c("Model 1", "Model 2", "Model 3", "Model 4")
+  , custom.coef.map = list(
+         "party_leadershipYes" = "Party leadership"
+         , "committee_leadershipYes" = "Committee leadership"
+         , "caucus_leaderYes" = "Caucus leader"
+         , "seniority_ln_scaled" = "log(Seniority)"
+         , "les_ln_scaled" = "log(LES)"                    
+         , "fold_nominate_scaled" = "Extremism"    
+         , "majority_party1" = "Majority party"
+         , "party_nameRepublican" = "Republican" 
+         
+         , "votepct_scaled" = "Win vote pct."        
+         , "race_ethnicityBlack" = "Black"      
+         , "race_ethnicityLatino" = "Latino"
+         , "race_ethnicityAsian PI" = "Asian/PI"
+         , "race_ethnicityNative Am" = "Native Am."
+         , "genderFemale" = "Female"        
+         , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+         , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+         
+         , "numPR_total_scaled" = "Total press releases")
+       , groups = list("\\textbf{Member characteristics}" = 1:8, "\\textbf{Controls}" = 9:16, "\\textbf{Extra Control}" = 17)
+       , bold = 0.05
+       , stars = numeric(0)
+       , scalebox = 1.0
+       , include.rsquared = TRUE
+       , include.adjrs = FALSE
+       , custom.gof.row = list(
+         "Fixed effects" = c("\\textit{No}", "\\textit{Indiv.}", "\\textit{Party}", "\\textit{No}")
+       )
+       , caption = "Accounting for Member Influence"
+       , custom.note = "\\texit{Note:} Coefficient estimates are bold at the 0.05 significance level."
+       , label = "tab:mainmodels"
        , float.pos = "h"
 )
 
@@ -1644,16 +1686,143 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
 
 
 
-
-
-
-
-
-
-
-
+#############################################################
 
 #############################################################
+# Main Models - by Majority/Minority status
+#############################################################
+
+###
+# Make main models - Maj/Min
+###
+
+# OLS - Majority - No controls
+ols.none.MAJ <- lm(pagerank10 ~
+                 party_leadership
+               + committee_leadership
+               + caucus_leader
+               + seniority_ln_scaled
+               + les_ln_scaled
+               + fold_nominate_scaled
+               # + party_name
+               
+               , data = filter(dat.ols, majority_party == 1))
+
+# OLS - Minority - No controls
+ols.none.MIN <- lm(pagerank10 ~
+                     party_leadership
+                   + committee_leadership
+                   + caucus_leader
+                   + seniority_ln_scaled
+                   + les_ln_scaled
+                   + fold_nominate_scaled
+                   # + party_name
+                   
+                   , data = filter(dat.ols, majority_party == 0))
+
+
+
+# OLS - Majority - Controls Extra
+ols.controlsExtra.MAJ <- lm(pagerank10 ~
+                          party_leadership
+                        + committee_leadership
+                        + caucus_leader
+                        + seniority_ln_scaled
+                        + les_ln_scaled
+                        + fold_nominate_scaled
+                        # + party_name
+                        
+                        # Controls group
+                        + votepct_scaled
+                        + race_ethnicity
+                        + gender
+                        + bills_cosponsored_ln_scaled
+                        + votes_with_party_pct_ln_scaled
+                        
+                        # Extra control
+                        + numPR_total_scaled
+                        
+                        , data = filter(dat.ols, majority_party == 1))
+
+
+# OLS - Minority - Controls Extra
+ols.controlsExtra.MIN <- lm(pagerank10 ~
+                              party_leadership
+                            + committee_leadership
+                            + caucus_leader
+                            + seniority_ln_scaled
+                            + les_ln_scaled
+                            + fold_nominate_scaled
+                            # + party_name
+                            
+                            # Controls group
+                            + votepct_scaled
+                            + race_ethnicity
+                            + gender
+                            + bills_cosponsored_ln_scaled
+                            + votes_with_party_pct_ln_scaled
+                            
+                            # Extra control
+                            + numPR_total_scaled
+                            
+                            , data = filter(dat.ols, majority_party == 0))
+
+
+
+
+
+texreg(l = list(
+  ols.none.MAJ, ols.controlsExtra.MAJ
+  , ols.none.MIN, ols.controlsExtra.MIN
+  )
+  , custom.model.names = c("Model 1", "Model 2", "Model 1", "Model 2")
+  , custom.header = list("Majority Party" = 1:2, "Minority Party" = 3:4)
+  , custom.coef.map = list(
+    "party_leadershipYes" = "Party leadership"
+    , "committee_leadershipYes" = "Committee leadership"
+    , "caucus_leaderYes" = "Caucus leader"
+    , "seniority_ln_scaled" = "log(Seniority)"
+    , "les_ln_scaled" = "log(LES)"                    
+    , "fold_nominate_scaled" = "Extremism"    
+    # , "majority_party1" = "Majority party"
+    # , "party_nameRepublican" = "Republican" 
+    
+    # , "votepct_scaled" = "Win vote pct."        
+    # , "race_ethnicityBlack" = "Black"      
+    # , "race_ethnicityLatino" = "Latino"
+    # , "race_ethnicityAsian PI" = "Asian/PI"
+    # , "race_ethnicityNative Am" = "Native Am."
+    # , "genderFemale" = "Female"        
+    # , "bills_cosponsored_ln_scaled"  = "log(Bills cosponsored)"   
+    # , "votes_with_party_pct_ln_scaled" = "log(Votes w/ party pct.)"
+    # 
+    # , "numPR_total_scaled" = "Total press releases"
+    )
+  # , groups = list("\\textbf{Member characteristics}" = 1:6, "\\textbf{Controls}" = 7:14, "\\textbf{Extra Control}" = 15)
+  , bold = 0.05
+  , stars = numeric(0)
+  # , scalebox = 1.0
+  , custom.gof.rows = list(
+    "Controls" = c("No", "Yes", "No", "Yes")
+    , "Num. Democrats" = c(169, 160, 493, 456)
+    , "Num. Republicans" = c(602, 559, 158, 156)
+  )
+  , include.rsquared = TRUE
+  , include.adjrs = FALSE
+  , reorder.gof = c(1, 5, 2, 3, 4)
+  , caption = "Accounting for Member Influence Conditional on Majority Party Status"
+  , custom.note = "\\texit{Note:} Coefficient estimates are bold at the 0.05 significance level."
+  , label = "tab:majoritypartymodels"
+  , float.pos = "h"
+)
+
+
+tmp.d <- dat.ols %>% filter(party_name == "Democrat")
+table(tmp.d$majority_party)
+
+tmp.r <- dat.ols %>% filter(party_name == "Republican")
+table(tmp.r$majority_party)
+
 #############################################################
 # Coefficient Visualizations - Hypothesis tests
 # Plotting main variable coefficients, from all models
@@ -1798,6 +1967,10 @@ fig.majority +
 
 
 
+
+
+
+
 ##############################################################
 # Appendix Chapter 3: Summary Tables (maybe for body)
 # Add column for # of people who changed status
@@ -1815,11 +1988,23 @@ changeStatus.fns <- function(dat, x){
 } 
 
 
+leads <- dat_congressNets %>% 
+  filter(party_leadership == "Yes") %>% 
+  select(member_id) %>% 
+  distinct() %>% 
+  pull()
+
+change.df <- 
+  dat_congressNets %>% 
+  filter(member_id %in% leads) %>% 
+  group_by(member_id) %>% 
+  mutate(change = ifelse(n_distinct(party_leadership, na.rm = TRUE) == 1, "noChange", "change")) %>% 
+  ungroup() %>% 
+  select(change)
 
 
-
-
-
+ggplot(dat_congressNets) +
+  geom_density(aes(fold_nominate_scaled, fill = party_name), alpha = 0.6)
 
 
 
