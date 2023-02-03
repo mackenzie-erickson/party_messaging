@@ -463,65 +463,65 @@ score_congressNet.df.R <- bind_rows(
 # For comparison
 ###################
 
-# ###
-# # Apply networks and centrality function - Politically Salient
-# ###
-# set.seed(1776)
-# score_list_salient.R <- estimateNetwork_outputScore.fns(politSalient.R, model = "exponential")
-# score_list_salient.D <- estimateNetwork_outputScore.fns(politSalient.D, model = "exponential")
-# 
-# 
-# ###
-# # Flatten to dfs (politically salient)
-# ###
-# 
-# # Dems
-# score_salient.df.D <- bind_rows(
-#   score_list_salient.D[[1]],
-#   score_list_salient.D[[2]],
-#   score_list_salient.D[[3]],
-#   score_list_salient.D[[4]],
-# )
-# 
-# # Repubs
-# score_salient.df.R <- bind_rows(
-#   score_list_salient.R[[1]],
-#   score_list_salient.R[[2]],
-#   score_list_salient.R[[3]],
-#   score_list_salient.R[[4]],
-# )
-# 
-# 
-# ######
-# # Politically salient - comparison
-# #####
-# 
+###
+# Apply networks and centrality function - Politically Salient
+###
+set.seed(1776)
+score_list_salient.R <- estimateNetwork_outputScore.fns(politSalient.R, model = "exponential")
+score_list_salient.D <- estimateNetwork_outputScore.fns(politSalient.D, model = "exponential")
+
+
+###
+# Flatten to dfs (politically salient)
+###
+
+# Dems
+score_salient.df.D <- bind_rows(
+  score_list_salient.D[[1]],
+  score_list_salient.D[[2]],
+  score_list_salient.D[[3]],
+  score_list_salient.D[[4]],
+)
+
+# Repubs
+score_salient.df.R <- bind_rows(
+  score_list_salient.R[[1]],
+  score_list_salient.R[[2]],
+  score_list_salient.R[[3]],
+  score_list_salient.R[[4]],
+)
+
+
+######
+# Politically salient - comparison
+#####
+
 # # Pull out relevant columns, rename and bind D and R - salient
-# score_salient.D <- score_salient.df.D %>% 
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+# score_salient.D <- score_salient.df.D %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
 #   rename(pagerank_REVERSE_salient = pagerank_REVERSE
-#          , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
 #   mutate(party = "D")
 # 
-# score_salient.R <- score_salient.df.R %>% 
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+# score_salient.R <- score_salient.df.R %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
 #   rename(pagerank_REVERSE_salient = pagerank_REVERSE
-#          , pagerank_DIFF_salient = pagerank_DIFF) %>% 
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
 #   mutate(party = "R")
 # 
 # score_salient.all <- bind_rows(score_salient.D, score_salient.R)
 # 
 # # Pull out relevant columns, rename and bind D and R - salient and non-salient
-# score_normal.D <- score_congressNet.df.D %>% 
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+# score_normal.D <- score_congressNet.df.D %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
 #   rename(pagerank_REVERSE_normal = pagerank_REVERSE
-#          , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
 #   mutate(party = "D")
 # 
-# score_normal.R <- score_congressNet.df.R %>% 
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>% 
+# score_normal.R <- score_congressNet.df.R %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
 #   rename(pagerank_REVERSE_normal = pagerank_REVERSE
-#          , pagerank_DIFF_normal = pagerank_DIFF) %>% 
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
 #   mutate(party = "R")
 # 
 # score_normal.all <- bind_rows(score_normal.D, score_normal.R)
@@ -532,11 +532,11 @@ score_congressNet.df.R <- bind_rows(
 # 
 # # Plot correlation
 # ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
-#   geom_point() +
-#   geom_smooth() +
+#   geom_point(size = 1, alpha = 0.75) +
+#   geom_smooth(color = "dark red") +
 #   theme_minimal() +
-#   labs(x = "Influence score - all topics", y = "Influence score - politically salient topics") +
-#   ggtitle("Influence scores are robust to changes in included topics")
+#   labs(x = "Influence score - All topics", y = "Influence score - Politically salient topics") +
+#   ggtitle("Influence Scores are Robust to Changes in Included Topics")
 # 
 # # Caluclate correlation
 # cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
@@ -706,6 +706,8 @@ scoreCongressNets_legCovs.D <-
 ###
 
 dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs.R)
+
+#### STOPPED HERE - Jan 31 - making Chapter 2 Appendix
 
 # Save
 # saveRDS(dat_congressNets, paste0(getwd(), "/Data/congressNets_immediatelyAfterMerge.RDS"))
@@ -951,8 +953,6 @@ dat.plm <- pdata.frame(
   dat_congressNets
   , index = c("member_id", "congress")
   , drop.index = TRUE)
-
-
 
 
 ###
@@ -1817,11 +1817,7 @@ texreg(l = list(
 )
 
 
-tmp.d <- dat.ols %>% filter(party_name == "Democrat")
-table(tmp.d$majority_party)
 
-tmp.r <- dat.ols %>% filter(party_name == "Republican")
-table(tmp.r$majority_party)
 
 #############################################################
 # Coefficient Visualizations - Hypothesis tests
@@ -2016,53 +2012,53 @@ ggplot(dat_congressNets) +
 ###############################################################################
 
 
-# Create tables of topic names and labels
-
-topicNames_tab.R <-
-  first.obs.R %>% 
-  select(topic_label, topicName, salient) %>% 
-  unique() %>% 
-  arrange(desc(salient))
-
-topicNames_tab.D <-
-  first.obs.D %>% 
-  select(topic_label, topicName, salient) %>% 
-  unique() %>% 
-  arrange(desc(salient))
-
-# Specify non-politically relevant rows
-gray_rows.R <- which(topicNames_tab.R$salient == 0)
-gray_rows.D <- which(topicNames_tab.D$salient == 0)
-
-kable(select(topicNames_tab.R, -salient)
-      , booktabs = TRUE
-      , format = 'latex'
-      # , row.names = NULL
-      , col.names = c('FREX stems', 'Topic')
-      , caption = "Republican press release topics"
-      , label = "tab:topicNames.R"
-      , ) %>% 
-  kable_styling(latex_options = 'scale_down') %>%
-  row_spec(gray_rows.R, color = "gray") %>% 
-  footnote("Press releases clustered into 30 topics. FREX stems are the top words in 
-  each topic cluster that are both frequent and exclusive and are best able to 
-  distinguish the topic.  Topics in gray represent those that may not be 
-  considered politically relevant.")
-
-kable(select(topicNames_tab.D, -salient)
-      , booktabs = TRUE
-      , format = 'latex'
-      # , row.names = NULL
-      , col.names = c('FREX stems', 'Topic')
-      , caption = "Democratic press release topics"
-      , label = "tab:topicNames.D"
-      , ) %>% 
-  kable_styling(latex_options = 'scale_down') %>%
-  row_spec(gray_rows.D, color = "gray") %>% 
-  footnote("Democratic press releases clustered into 30 topics. FREX stems are the top stems in 
-  each topic cluster that are both frequent and exclusive and are best able to 
-  distinguish the topic.  Topics in gray represent those that may not be 
-  considered politically relevant.")
+# # Create tables of topic names and labels
+# 
+# topicNames_tab.R <-
+#   first.obs.R %>% 
+#   select(topic_label, topicName, salient) %>% 
+#   unique() %>% 
+#   arrange(desc(salient))
+# 
+# topicNames_tab.D <-
+#   first.obs.D %>% 
+#   select(topic_label, topicName, salient) %>% 
+#   unique() %>% 
+#   arrange(desc(salient))
+# 
+# # Specify non-politically relevant rows
+# gray_rows.R <- which(topicNames_tab.R$salient == 0)
+# gray_rows.D <- which(topicNames_tab.D$salient == 0)
+# 
+# kable(select(topicNames_tab.R, -salient)
+#       , booktabs = TRUE
+#       , format = 'latex'
+#       # , row.names = NULL
+#       , col.names = c('FREX stems', 'Topic')
+#       , caption = "Republican press release topics"
+#       , label = "tab:topicNames.R"
+#       , ) %>% 
+#   kable_styling(latex_options = 'scale_down') %>%
+#   row_spec(gray_rows.R, color = "gray") %>% 
+#   footnote("Press releases clustered into 30 topics. FREX stems are the top words in 
+#   each topic cluster that are both frequent and exclusive and are best able to 
+#   distinguish the topic.  Topics in gray represent those that may not be 
+#   considered politically relevant.")
+# 
+# kable(select(topicNames_tab.D, -salient)
+#       , booktabs = TRUE
+#       , format = 'latex'
+#       # , row.names = NULL
+#       , col.names = c('FREX stems', 'Topic')
+#       , caption = "Democratic press release topics"
+#       , label = "tab:topicNames.D"
+#       , ) %>% 
+#   kable_styling(latex_options = 'scale_down') %>%
+#   row_spec(gray_rows.D, color = "gray") %>% 
+#   footnote("Democratic press releases clustered into 30 topics. FREX stems are the top stems in 
+#   each topic cluster that are both frequent and exclusive and are best able to 
+#   distinguish the topic.  Topics in gray represent those that may not be 
+#   considered politically relevant.")
 
 
 
@@ -2072,11 +2068,18 @@ kable(select(topicNames_tab.D, -salient)
 ####################################################
 
 # # Distribution of pagerank scores
-# ggplot(dat_congressNets) +
-#   geom_boxplot(aes(pagerank_REVERSE)) +
-#   theme_minimal() +
-#   labs(x = "PageRank influence score") +
-#   ggtitle("Distribution of Influence Scores")
+# ggpubr::gghistogram(
+#   dat_congressNets
+#   , x = "pagerank_REVERSE"
+#   , bins = 100
+#   , color = "#0073C2FF"
+#     , fill = "#0073C2FF"
+#     , add = "mean"
+#   , rug = TRUE
+#   , xlab = "Influence Score"
+#     , ylab = ""
+#     , title = "Raw Distribution of PageRank Influence Scores"
+#   )
 # 
 # # Distribution of logged, scaled, pagerank scores
 # ggplot(dat_congressNets) +
@@ -2489,6 +2492,42 @@ D113.network <- createNetworks.minifns(D113.cascades)
 D114.network <- createNetworks.minifns(D114.cascades)
 D115.network <- createNetworks.minifns(D115.cascades)
 D116.network <- createNetworks.minifns(D116.cascades)
+
+
+
+####################################
+
+###
+# Mini example of cascade (2 topics, 10 days)
+###
+
+# # Create 2-topic cascade
+# # With topicName instead, so it labels correctly
+# cascadePlotData <-
+#   first.obs.D %>% 
+#   filter(congress == 115) %>% 
+#   filter(topicName %in% c("Taxes", "Climate")) %>% 
+#   arrange(topicName, member_id) %>% 
+#   as_cascade_long(
+#    cascade_node_name = 'member_id'
+#   , event_time = 'date_pr'
+#   , cascade_id = 'topicName'
+# )
+# 
+# # Pick first 10 days
+# time_constrainedData <- subset_cascade_time(cascade = cascadePlotData
+#                                             , start_time = as.Date("2017-01-03")
+#                                             , end_time = as.Date("2017-01-13"))
+# 
+# # NetInf changed dates to numeric - change it back
+# time_constrainedData$cascade_times$Climate <- as.Date(time_constrainedData$cascade_times$Climate, origin = "1970-01-01")
+# time_constrainedData$cascade_times$Taxes <- as.Date(time_constrainedData$cascade_times$Taxes, origin = "1970-01-01")
+# 
+# # Plot
+# plot(time_constrainedData, label_nodes = TRUE) +
+#   labs(x = "", y = "")
+
+
 
 
 
@@ -3010,7 +3049,7 @@ ggplot(data = group_by(firstObs_all, congress)) +
   labs(x = "", y = "") +
   theme_bw() +
   theme(panel.spacing.x = unit(5, "mm")) +
-  ggtitle("Time distribution - First use of topics by congress")
+  ggtitle("Distribution of First Topic Usage by Congress")
 
 
 # Distribution of first use within XXth congress ~ topic
