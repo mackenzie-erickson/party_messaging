@@ -496,50 +496,50 @@ score_salient.df.R <- bind_rows(
 # Politically salient - comparison
 #####
 
-# # Pull out relevant columns, rename and bind D and R - salient
-# score_salient.D <- score_salient.df.D %>%
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
-#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
-#   mutate(party = "D")
-# 
-# score_salient.R <- score_salient.df.R %>%
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
-#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
-#   mutate(party = "R")
-# 
-# score_salient.all <- bind_rows(score_salient.D, score_salient.R)
-# 
-# # Pull out relevant columns, rename and bind D and R - salient and non-salient
-# score_normal.D <- score_congressNet.df.D %>%
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
-#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
-#   mutate(party = "D")
-# 
-# score_normal.R <- score_congressNet.df.R %>%
-#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
-#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
-#   mutate(party = "R")
-# 
-# score_normal.all <- bind_rows(score_normal.D, score_normal.R)
-# 
-# # Join together (salient is smaller b/c some people have no salient press releases)
-# combined_scores <- left_join(score_normal.all, score_salient.all
-#                              , by = c("member_id", "congress"))
-# 
-# # Plot correlation
-# ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
-#   geom_point(size = 1, alpha = 0.75) +
-#   geom_smooth(color = "dark red") +
-#   theme_minimal() +
-#   labs(x = "Influence score - All topics", y = "Influence score - Politically salient topics") +
-#   ggtitle("Influence Scores are Robust to Changes in Included Topics")
-# 
-# # Caluclate correlation
-# cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
+# Pull out relevant columns, rename and bind D and R - salient
+score_salient.D <- score_salient.df.D %>%
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+  rename(pagerank_REVERSE_salient = pagerank_REVERSE
+         , pagerank_DIFF_salient = pagerank_DIFF) %>%
+  mutate(party = "D")
+
+score_salient.R <- score_salient.df.R %>%
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+  rename(pagerank_REVERSE_salient = pagerank_REVERSE
+         , pagerank_DIFF_salient = pagerank_DIFF) %>%
+  mutate(party = "R")
+
+score_salient.all <- bind_rows(score_salient.D, score_salient.R)
+
+# Pull out relevant columns, rename and bind D and R - salient and non-salient
+score_normal.D <- score_congressNet.df.D %>%
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+  rename(pagerank_REVERSE_normal = pagerank_REVERSE
+         , pagerank_DIFF_normal = pagerank_DIFF) %>%
+  mutate(party = "D")
+
+score_normal.R <- score_congressNet.df.R %>%
+  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+  rename(pagerank_REVERSE_normal = pagerank_REVERSE
+         , pagerank_DIFF_normal = pagerank_DIFF) %>%
+  mutate(party = "R")
+
+score_normal.all <- bind_rows(score_normal.D, score_normal.R)
+
+# Join together (salient is smaller b/c some people have no salient press releases)
+combined_scores <- left_join(score_normal.all, score_salient.all
+                             , by = c("member_id", "congress"))
+
+# Plot correlation
+ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
+  geom_point(size = 1, alpha = 0.75) +
+  geom_smooth(color = "dark red") +
+  theme_minimal() +
+  labs(x = "Influence score - All topics", y = "Influence score - Politically salient topics") 
+  # ggtitle("Influence Scores are Robust to Changes in Included Topics")
+
+# Caluclate correlation
+cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
 
 
 
@@ -2162,37 +2162,37 @@ prop.table(table(majority_median_merge$n_median))
 # freq.R <- topics_df.R %>%
 #   group_by(topicName) %>%
 #   summarise(cnt = n()) %>%
-#   mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+#   mutate(freq = round(cnt / sum(cnt), 3)) %>%
 #   arrange(desc(freq)) %>%
 #   left_join(., topicNames.R
-#             , by = c("topicName")) %>% 
-#   filter(salient == 1) %>% 
+#             , by = c("topicName")) %>%
+#   filter(salient == 1) %>%
 #   select(topicName, freq)
 # 
 # # % of press releases by topic - D
 # freq.D <- topics_df.D %>%
 #   group_by(topicName) %>%
 #   summarise(cnt = n()) %>%
-#   mutate(freq = round(cnt / sum(cnt), 3)) %>% 
+#   mutate(freq = round(cnt / sum(cnt), 3)) %>%
 #   arrange(desc(freq)) %>%
 #   left_join(., topicNames.D
-#             , by = c("topicName")) %>% 
-#   filter(salient == 1) %>% 
+#             , by = c("topicName")) %>%
+#   filter(salient == 1) %>%
 #   select(topicName, freq)
 # 
 # # Full join
-# freq.both <- 
+# freq.both <-
 #   full_join(freq.R, freq.D
-#             , by = "topicName") %>% 
+#             , by = "topicName") %>%
 #   rename(freq.R = freq.x
 #          , freq.D = freq.y)
 # 
 # 
 # # Edit for figure
 # freq.both.edit <-
-#   freq.both %>% 
+#   freq.both %>%
 #   mutate(freq.D = 100 * freq.D
-#          , freq.R = 100 * freq.R) %>% 
+#          , freq.R = 100 * freq.R) %>%
 #   mutate(freq.D = as.numeric(paste0("-", freq.D)))
 # 
 # # Pivot longer
@@ -2209,16 +2209,16 @@ prop.table(table(majority_median_merge$n_median))
 # 
 # # Descending order for Dems
 # freq.both.long <-
-#   freq.both.long %>% 
+#   freq.both.long %>%
 #   arrange(desc(freq), .by_group = TRUE)
 # 
 # # Get names to set the limits - Democrats (ascending order b/c negative)
 # dem.topic.limits <-
-#   freq.both.long %>% 
-#   filter(party == "D") %>% 
-#   filter(!is.na(freq)) %>% 
-#   arrange(freq) %>% 
-#   select(topicName) %>% 
+#   freq.both.long %>%
+#   filter(party == "D") %>%
+#   filter(!is.na(freq)) %>%
+#   arrange(freq) %>%
+#   select(topicName) %>%
 #   pull()
 # 
 # # Additional republican topics that Dems don't talk about (also ascending order)
@@ -2240,11 +2240,11 @@ prop.table(table(majority_median_merge$n_median))
 #   theme_bw() +
 #   xlab("Dem                                                           Rep") +
 #   ylab("") +
-#   scale_x_continuous(breaks = c(-6, -3, 0, 3, 6), 
+#   scale_x_continuous(breaks = c(-6, -3, 0, 3, 6),
 #                      labels = paste0(c(6, 3, 0, 3, 6),"%")) +
 #   scale_y_discrete(limits = rev(party.topic.limits)) +
-#   scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red")) +
-#   ggtitle("Democrats and Republicans diverge in topic focus")
+#   scale_fill_manual(guide = "none", values = c("TRUE" = "dark blue", "FALSE" = "dark red"))
+#   # ggtitle("Democrats and Republicans diverge in topic focus")
 # 
 # 
 # 
@@ -2762,124 +2762,106 @@ tkplot(
 ########################################################################
 # Ch2 - S-curves (all topics and example topic)
 
-
-#########################################################################
-# S-Curves
-#########################################################################
-
-# Start with a single topic - Dems talking about climate in 116th congress
-dem.climate.116 <- first.obs.D %>% 
-  filter(congress == 113 & topicName == "Iran nuclear")
-
-infections.by.time <- dem.climate.116 %>% 
-  # filter(date_pr < ymd("2014-03-01")) %>% 
-  group_by(lubridate::month(date_pr, label = TRUE, abbr = TRUE)) %>% 
-  summarize(n.infections = n()) %>% 
-  ungroup() %>% 
-  mutate(cum.infections = cumsum(n.infections))
-
-
-ggplot(infections.by.time, aes(x = `month(date_pr)`)) +
-  geom_smooth(aes(y = n.infections), se = FALSE) +
-  geom_smooth(aes(y = cum.infections), se = FALSE)
-  
-
-
-# Plot density of use
-topics_df.D %>%
-  filter(congress == 116 & topicName == "Climate") %>% 
-  ggplot(., aes(x = date_pr)) +
-  geom_smooth()
-  geom_density(aes(y = cumsum(after_stat(count))))
-  stat_bin(aes(y=cumsum(after_stat(count))), geom="step")
-
-
-  
-topics_df.D %>% 
-  filter(congress == 113 & salient == 1 & topicName != "COVID-19") %>% 
-  # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
-  ggplot(data = ., aes(x = date_pr)) +
-  geom_step(aes(y = ..y..), stat = "ecdf") +
-  scale_x_date(labels = scales::label_date_short()) +
-  facet_wrap(~topicName) +
-  labs(x = "", y = "") +
-  # ggtitle("Diffusion of Democratic topics in the 113th Congress") +
-  theme_minimal() +
-  theme(panel.spacing.x = unit(6, "mm")) # prevent overlapping labels
-
-
-topics_df.R %>% 
-  filter(congress == 113 & salient == 1 & topicName != "COVID-19" & topicName != "Higher edu.") %>% 
-  # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
-  ggplot(data = ., aes(x = date_pr)) +
-  geom_step(aes(y = ..y..), stat = "ecdf") +
-  scale_x_date(labels = scales::label_date_short()) +
-  facet_wrap(~topicName) +
-  labs(x = "", y = "") +
-  # ggtitle("Diffusion of Republican topics in the 113th Congress") +
-  theme_minimal() +
-  theme(panel.spacing.x = unit(6, "mm")) # prevent overlapping labels
-
-
 ######
 # D & R s-curves of Immigration during 115th congress (first immigration ban signed Jan 2017)
 #####
+# # Both parties on one figure
+# 
+# # Merge topics
+# topics_all <- rbind(topics_df.D, topics_df.R)
+# 
+# # Plot
+# ggplot(data = filter(topics_all, congress == 115 & topicName == "Immigration")
+#        , aes(x = date_pr)) +
+#   geom_step(aes(y = after_stat(y), color = party_atPR)
+#             , stat = "ecdf"
+#             , alpha = 0.5
+#   ) +
+#   annotate(geom = "text"
+#            , x = ymd("2017-05-01")
+#            , y = 0.12
+#            , label = "Early adopters"
+#            , size = 3.1) +
+#   annotate(geom = "text"
+#            , x = ymd("2017-11-10")
+#            , y = 0.39
+#            , label = "Early majority"
+#            , size = 3.1) +
+#   annotate(geom = "text"
+#            , x = ymd("2018-04-15")
+#            , y = 0.73
+#            , label = "Late majority"
+#            , size = 3.1) +
+#   annotate(geom = "text"
+#            , x = ymd("2018-07-30")
+#            , y = 0.94
+#            , label = "Laggards"
+#            , size = 3.1) +
+#   scale_x_date(labels = scales::label_date_short()) +
+#   theme_minimal() +
+#   labs(x = "", y = "") +
+#   scale_color_manual(values = c("blue", "dark red")
+#                      , name = ""
+#                      , labels = c("D" = "Democrats", "R" = "Republicans")
+#   ) +
+#   theme(legend.position = "bottom")
+# 
+# 
+# #########################################################################
+# # S-Curves - All for 113th congress
+# #########################################################################
+# 
+# # Start with a single topic - Dems talking about climate in 116th congress
+# dem.climate.116 <- first.obs.D %>% 
+#   filter(congress == 113 & topicName == "Iran nuclear")
+# 
+# infections.by.time <- dem.climate.116 %>% 
+#   # filter(date_pr < ymd("2014-03-01")) %>% 
+#   group_by(lubridate::month(date_pr, label = TRUE, abbr = TRUE)) %>% 
+#   summarize(n.infections = n()) %>% 
+#   ungroup() %>% 
+#   mutate(cum.infections = cumsum(n.infections))
+# 
+# 
+# ggplot(infections.by.time, aes(x = `month(date_pr)`)) +
+#   geom_smooth(aes(y = n.infections), se = FALSE) +
+#   geom_smooth(aes(y = cum.infections), se = FALSE)
+#   
+# 
+# 
+# 
+# 
+# 
+#   
+# topics_df.D %>% 
+#   filter(congress == 113 & salient == 1 & topicName != "COVID-19") %>% 
+#   # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
+#   ggplot(data = ., aes(x = date_pr)) +
+#   geom_step(aes(y = ..y..), stat = "ecdf") +
+#   scale_x_date(labels = scales::label_date_short()) +
+#   facet_wrap(~topicName) +
+#   labs(y = "", x = "") +
+#   # ggtitle("Diffusion of Democratic topics in the 113th Congress") +
+#   # theme_minimal() +
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+#         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+#   theme(panel.spacing.x = unit(6, "mm")) # prevent overlapping labels
+# 
+# 
+# topics_df.R %>% 
+#   filter(congress == 113 & salient == 1 & topicName != "COVID-19" & topicName != "Higher edu.") %>% 
+#   # ggplot(., aes(x = lubridate::month(date_pr, label = TRUE, abbr = TRUE))) +
+#   ggplot(data = ., aes(x = date_pr)) +
+#   geom_step(aes(y = ..y..), stat = "ecdf") +
+#   scale_x_date(labels = scales::label_date_short()) +
+#   facet_wrap(~topicName) +
+#   labs(y = "", x = "") +
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+#         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+#   theme(panel.spacing.x = unit(6, "mm")) 
 
-# Democrats
-dem.immi.115 <-
-  topics_df.D %>% 
-  filter(congress == 115 & topicName == "Immigration") %>% 
-  ggplot(data = ., aes(x = date_pr)) +
-  geom_step(aes(y = ..y..), stat = "ecdf") +
-  # scale_x_date(labels = scales::label_date_short()) +
-  annotate(geom = "text"
-           , x = ymd("2017-06-10")
-           , y = 0.12
-           , label = "Early adopters") +
-  annotate(geom = "text"
-           , x = ymd("2017-11-08")
-           , y = 0.28
-           , label = "Early majority") +
-  annotate(geom = "text"
-           , x = ymd("2018-03-01")
-           , y = 0.68
-           , label = "Late majority") +
-  annotate(geom = "text"
-           , x = ymd("2018-06-30")
-           , y = 0.94
-           , label = "Laggards") +
-  theme_minimal() +
-  labs(x = "", y = "") +
-  theme(axis.text.x.bottom = element_blank()) +
-  ggtitle("Democratic press releases") +
-  theme(plot.title = element_text(size = 11))
-  # <- Trying to remove bottom x axis on Dem plot, and then put together with R. Then just write 
-# caption about how it follows a common s-curve-ish. Say that a figure with all topics can be found in the appendix
-
-# Republicans
-rep.immi.115 <- topics_df.R %>% 
-  filter(congress == 115 & topicName == "Immigration") %>% 
-  ggplot(data = ., aes(x = date_pr)) +
-  geom_step(aes(y = ..y..), stat = "ecdf") +
-  scale_x_date(labels = scales::label_date_short()) +
-  theme_minimal() +
-  labs(x = "", y = "") +
-  ggtitle("Republican press releases") +
-  theme(plot.title = element_text(size = 11))
-
-###
-# Put them together
-###
-
-# Create title
-title.grob.immigration <- textGrob("Cumulative communication of the topic \"Immigration\" during Trump's Muslim ban \n"
-                                   , gp = gpar(fontsize = 12))
 
 
-# Arrange grobs
-grid.arrange(arrangeGrob(dem.immi.115, rep.immi.115
-                         , ncol = 1
-                         , top = title.grob.immigration))
 
 
 #########################################################################
