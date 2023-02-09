@@ -86,7 +86,8 @@ D.list$results <- dfD.merge
 ######################
 # Following this blog: https://juliasilge.com/blog/evaluating-stm/
 
-plot(R.list) # 25 topics is best
+# Plot diagnostics
+plot(R.list)
 
 plot(D.list)
 
@@ -100,33 +101,44 @@ R.list$results %>%
   # filter(K %in% c(20, 60, 100)) %>%
   unnest(cols = c(K, exclus, semcoh)) %>%
   mutate(K = as.factor(K)) %>%
-  ggplot(aes(semcoh, exclus, color = K, shape = K)) +
-  geom_point(size = 2, alpha = 0.7) +
+  ggplot(aes(semcoh, exclus, color = K)) +
+  geom_point(size = 3) +
   labs(x = "Semantic coherence",
-       y = "Exclusivity",
-       title = "Comparing exclusivity and semantic coherence",
-       subtitle = "House Republicans") +
+       y = "Exclusivity"
+       # title = "Tradeoff between Exclusivity and Semantic Coherence",
+       # subtitle = "House Republicans"
+       ) +
   theme_minimal() +
-  scale_x_continuous(limits = c(-90, -60))
+  scale_x_continuous(limits = c(-90, -65)) +
+  scale_color_manual(values = unname(pals::alphabet(n=9))) +
+  annotate("text"
+           , x= -77, y = 9.771
+           , cex = 3.5
+           , label = "Selected model")
 
-
-
-#############
-# plot_exclusivityCoherenceTradeoff}
-
+# Figure: Exclusivity:Coherence Tradeoff
 D.list$results %>%
   select(K, exclus, semcoh) %>%
   # filter(K %in% c(20, 60, 100)) %>%
   unnest(cols = c(K, exclus, semcoh)) %>%
   mutate(K = as.factor(K)) %>%
-  ggplot(aes(semcoh, exclus, color = K, shape = K)) +
-  geom_point(size = 2, alpha = 0.7) +
+  ggplot(aes(semcoh, exclus, color = K)) +
+  geom_point(size = 3) +
   labs(x = "Semantic coherence",
-       y = "Exclusivity",
-       title = "Comparing exclusivity and semantic coherence",
-       subtitle = "House Democrats") +
+       y = "Exclusivity"
+       # title = "Tradeoff between Exclusivity and Semantic Coherence",
+       # subtitle = "House Democrats"
+       ) +
   theme_minimal() +
-  scale_x_continuous(limits = c(-90, -60))
+  # scale_x_continuous(limits = c(-90, -65)) +
+  scale_color_manual(values = unname(pals::alphabet(n=9))) +
+  annotate("text"
+           , x= -73.8, y = 9.7616
+           , cex = 3.5
+           , label = "Selected model")
+
+
+
 
 
 ###################

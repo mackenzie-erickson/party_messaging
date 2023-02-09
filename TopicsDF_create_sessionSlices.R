@@ -249,7 +249,7 @@ politSalient.D <- first.obs.D %>%
 
 
 ##########
-# Prepare data for cascades that are topic-session (so that there is more info for the netinf)
+# Topic - Session (Prepare data for cascades that are topic-session (so that there is more info for the netinf))
 #########
 
 # Create congress_session var (e.g. 115_1)
@@ -496,50 +496,50 @@ score_salient.df.R <- bind_rows(
 # Politically salient - comparison
 #####
 
-# Pull out relevant columns, rename and bind D and R - salient
-score_salient.D <- score_salient.df.D %>%
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-  rename(pagerank_REVERSE_salient = pagerank_REVERSE
-         , pagerank_DIFF_salient = pagerank_DIFF) %>%
-  mutate(party = "D")
-
-score_salient.R <- score_salient.df.R %>%
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-  rename(pagerank_REVERSE_salient = pagerank_REVERSE
-         , pagerank_DIFF_salient = pagerank_DIFF) %>%
-  mutate(party = "R")
-
-score_salient.all <- bind_rows(score_salient.D, score_salient.R)
-
-# Pull out relevant columns, rename and bind D and R - salient and non-salient
-score_normal.D <- score_congressNet.df.D %>%
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-  rename(pagerank_REVERSE_normal = pagerank_REVERSE
-         , pagerank_DIFF_normal = pagerank_DIFF) %>%
-  mutate(party = "D")
-
-score_normal.R <- score_congressNet.df.R %>%
-  select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
-  rename(pagerank_REVERSE_normal = pagerank_REVERSE
-         , pagerank_DIFF_normal = pagerank_DIFF) %>%
-  mutate(party = "R")
-
-score_normal.all <- bind_rows(score_normal.D, score_normal.R)
-
-# Join together (salient is smaller b/c some people have no salient press releases)
-combined_scores <- left_join(score_normal.all, score_salient.all
-                             , by = c("member_id", "congress"))
-
-# Plot correlation
-ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
-  geom_point(size = 1, alpha = 0.75) +
-  geom_smooth(color = "dark red") +
-  theme_minimal() +
-  labs(x = "Influence score - All topics", y = "Influence score - Politically salient topics") 
-  # ggtitle("Influence Scores are Robust to Changes in Included Topics")
-
-# Caluclate correlation
-cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
+# # Pull out relevant columns, rename and bind D and R - salient
+# score_salient.D <- score_salient.df.D %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
+#   mutate(party = "D")
+# 
+# score_salient.R <- score_salient.df.R %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+#   rename(pagerank_REVERSE_salient = pagerank_REVERSE
+#          , pagerank_DIFF_salient = pagerank_DIFF) %>%
+#   mutate(party = "R")
+# 
+# score_salient.all <- bind_rows(score_salient.D, score_salient.R)
+# 
+# # Pull out relevant columns, rename and bind D and R - salient and non-salient
+# score_normal.D <- score_congressNet.df.D %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
+#   mutate(party = "D")
+# 
+# score_normal.R <- score_congressNet.df.R %>%
+#   select(member_id, pagerank_REVERSE, pagerank_DIFF, congress) %>%
+#   rename(pagerank_REVERSE_normal = pagerank_REVERSE
+#          , pagerank_DIFF_normal = pagerank_DIFF) %>%
+#   mutate(party = "R")
+# 
+# score_normal.all <- bind_rows(score_normal.D, score_normal.R)
+# 
+# # Join together (salient is smaller b/c some people have no salient press releases)
+# combined_scores <- left_join(score_normal.all, score_salient.all
+#                              , by = c("member_id", "congress"))
+# 
+# # Plot correlation
+# ggplot(combined_scores, aes(x = pagerank_REVERSE_normal, y = pagerank_REVERSE_salient)) +
+#   geom_point(size = 1, alpha = 0.75) +
+#   geom_smooth(color = "dark red") +
+#   theme_minimal() +
+#   labs(x = "Influence score - All topics", y = "Influence score - Politically salient topics") 
+#   # ggtitle("Influence Scores are Robust to Changes in Included Topics")
+# 
+# # Caluclate correlation
+# cor(x = combined_scores$pagerank_REVERSE_normal, y = combined_scores$pagerank_REVERSE_salient, use = "pairwise.complete.obs")
 
 
 
@@ -623,6 +623,7 @@ propubVars.fun <- function(out, leg_covs){
   propubdat.relevant <-
     propubdat %>% 
     select(member_id
+           , icpsr
            , congress
            , first_name
            , last_name
@@ -714,10 +715,6 @@ dat_congressNets <- rbind(scoreCongressNets_legCovs.D, scoreCongressNets_legCovs
 
 
 
-################## Ran code through here !!!!################
-# - Need to get rid of factors (or at least put them in a separate object)
-# - Remove factors(hopefully this doesn't mess up 1/0)
-# Double check with RE/FE that it has the same output 
 
 
 ###############################################################
@@ -1015,7 +1012,7 @@ dat.plm <- pdata.frame(
 ols.none <- lm(pagerank10 ~
                  party_leadership
                + committee_leadership
-               + caucus_leader
+               + caucus_member
                + seniority_ln_scaled
                + les_ln_scaled
                + fold_nominate_scaled
@@ -1030,7 +1027,7 @@ ols.none <- lm(pagerank10 ~
 ols.controls <- lm(pagerank10 ~
                      party_leadership
                    + committee_leadership
-                   + caucus_leader
+                   + caucus_member
                    + seniority_ln_scaled
                    + les_ln_scaled
                    + fold_nominate_scaled
@@ -1055,7 +1052,7 @@ ols.controls <- lm(pagerank10 ~
 ols.controlsExtra <- lm(pagerank10 ~
                           party_leadership
                         + committee_leadership
-                        + caucus_leader
+                        + caucus_member
                         + seniority_ln_scaled
                         + les_ln_scaled
                         + fold_nominate_scaled
@@ -1090,7 +1087,7 @@ ols.controlsExtra <- lm(pagerank10 ~
 timeFE.none <- plm(pagerank10 ~
                      party_leadership
                    + committee_leadership
-                   + caucus_leader
+                   + caucus_member
                    + seniority_ln_scaled
                    + les_ln_scaled
                    + fold_nominate_scaled
@@ -1110,7 +1107,7 @@ timeFE.none <- plm(pagerank10 ~
 timeFE.controls <- plm(pagerank10 ~
                          party_leadership
                        + committee_leadership
-                       + caucus_leader
+                       + caucus_member
                        + seniority_ln_scaled
                        + les_ln_scaled
                        + fold_nominate_scaled
@@ -1137,7 +1134,7 @@ timeFE.controls <- plm(pagerank10 ~
 timeFE.controlsExtra <- plm(pagerank10 ~
                               party_leadership
                             + committee_leadership
-                            + caucus_leader
+                            + caucus_member
                             + seniority_ln_scaled
                             + les_ln_scaled
                             + fold_nominate_scaled
@@ -1170,7 +1167,7 @@ timeFE.controlsExtra <- plm(pagerank10 ~
 memberFE.none <- plm(pagerank10 ~
                       party_leadership
                     + committee_leadership
-                    + caucus_leader
+                    + caucus_member
                     + seniority_ln_scaled
                     + les_ln_scaled
                     + fold_nominate_scaled
@@ -1190,7 +1187,7 @@ memberFE.none <- plm(pagerank10 ~
 memberFE.controls <- plm(pagerank10 ~
                            party_leadership
                          + committee_leadership
-                         + caucus_leader
+                         + caucus_member
                          + seniority_ln_scaled
                          + les_ln_scaled
                          + fold_nominate_scaled
@@ -1217,7 +1214,7 @@ memberFE.controls <- plm(pagerank10 ~
 memberFE.controlsExtra <- plm(pagerank10 ~
                                 party_leadership
                               + committee_leadership
-                              + caucus_leader
+                              + caucus_member
                               + seniority_ln_scaled
                               + les_ln_scaled
                               + fold_nominate_scaled
@@ -1250,7 +1247,7 @@ memberFE.controlsExtra <- plm(pagerank10 ~
 partyFE.none <- lm(pagerank10 ~
                       party_leadership
                     + committee_leadership
-                    + caucus_leader
+                    + caucus_member
                     + seniority_ln_scaled
                     + les_ln_scaled
                     + fold_nominate_scaled
@@ -1268,7 +1265,7 @@ partyFE.none <- lm(pagerank10 ~
 partyFE.controls <- lm(pagerank10 ~
                          party_leadership
                        + committee_leadership
-                       + caucus_leader
+                       + caucus_member
                        + seniority_ln_scaled
                        + les_ln_scaled
                        + fold_nominate_scaled
@@ -1293,7 +1290,7 @@ partyFE.controls <- lm(pagerank10 ~
 partyFE.controlsExtra <- lm(pagerank10 ~
                               party_leadership
                             + committee_leadership
-                            + caucus_leader
+                            + caucus_member
                             + seniority_ln_scaled
                             + les_ln_scaled
                             + fold_nominate_scaled
@@ -1327,7 +1324,7 @@ partyFE.controlsExtra <- lm(pagerank10 ~
 memberRE.none <- plm(pagerank10 ~
                        party_leadership
                      + committee_leadership
-                     + caucus_leader
+                     + caucus_member
                      + seniority_ln_scaled
                      + les_ln_scaled
                      + fold_nominate_scaled
@@ -1347,7 +1344,7 @@ memberRE.none <- plm(pagerank10 ~
 memberRE.controls <- plm(pagerank10 ~
                            party_leadership
                          + committee_leadership
-                         + caucus_leader
+                         + caucus_member
                          + seniority_ln_scaled
                          + les_ln_scaled
                          + fold_nominate_scaled
@@ -1373,7 +1370,7 @@ memberRE.controls <- plm(pagerank10 ~
 memberRE.controlsExtra <- plm(pagerank10 ~
                                 party_leadership
                               + committee_leadership
-                              + caucus_leader
+                              + caucus_member
                               + seniority_ln_scaled
                               + les_ln_scaled
                               + fold_nominate_scaled
@@ -1425,7 +1422,7 @@ texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
@@ -1450,7 +1447,7 @@ texreg(l = list(modelList$ols_models$ols.none, modelList$ols_models$ols.controls
        , scalebox = 1.0
        , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , caption = "OLS Models Accounting for Member Influence"
+       , caption = "New OLS Mods"
        , label = "tab:appxOLS"
        , float.pos = "h"
 )
@@ -1469,7 +1466,7 @@ texreg(l = list(modelList$timeFE_models$timeFE.none, modelList$timeFE_models$tim
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
@@ -1494,7 +1491,7 @@ texreg(l = list(modelList$timeFE_models$timeFE.none, modelList$timeFE_models$tim
        , scalebox = 1.0
        , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , caption = "Time Fixed Effects Models Accounting for Member Influence"
+       , caption = "New Time FE mods"
        , label = "tab:appxTimeFE"
        , float.pos = "h"
 )
@@ -1509,7 +1506,7 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"
@@ -1534,7 +1531,7 @@ texreg(l = list(modelList$memberFE_models$memberFE.none, modelList$memberFE_mode
        , scalebox = 1.0
        , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , caption = "Individual Fixed Effects Models Accounting for Member Influence"
+       , caption = "New Indv FE mods"
        , label = "tab:appxMemberFE"
        , float.pos = "h"
 )
@@ -1551,7 +1548,7 @@ texreg(l = list(modelList$partyFE_models$partyFE.none, modelList$partyFE_models$
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
@@ -1576,7 +1573,7 @@ texreg(l = list(modelList$partyFE_models$partyFE.none, modelList$partyFE_models$
        , scalebox = 1.0
        , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , caption = "Party Fixed Effects Models Accounting for Member Influence"
+       , caption = "New party FE mods"
        , label = "tab:appxPartyFE"
        , float.pos = "h"
 )
@@ -1593,7 +1590,7 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
        custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
@@ -1618,7 +1615,7 @@ texreg(l = list(modelList$memberRE_models$memberRE.none, modelList$memberRE_mode
        , scalebox = 1.0
        , include.rsquared = TRUE
        , include.adjrs = FALSE
-       , caption = "Individual Random Effects Models Accounting for Member Influence"
+       , caption = "New RE mods"
        , label = "tab:appxRE"
        , float.pos = "h"
 )
@@ -1643,7 +1640,7 @@ texreg(l = list(
   , custom.coef.map = list(
          "party_leadershipYes" = "Party leadership"
          , "committee_leadershipYes" = "Committee leadership"
-         , "caucus_leaderYes" = "Caucus leader"
+         , "caucus_memberYes" = "Faction member"
          , "seniority_ln_scaled" = "log(Seniority)"
          , "les_ln_scaled" = "log(LES)"                    
          , "fold_nominate_scaled" = "Extremism"    
@@ -1672,7 +1669,7 @@ texreg(l = list(
        , caption = "Accounting for Member Influence"
        , custom.note = "\\texit{Note:} Coefficient estimates are bold at the 0.05 significance level."
        , label = "tab:mainmodels"
-       , float.pos = "h"
+       , float.pos = "H"
 )
 
 
@@ -1700,7 +1697,7 @@ texreg(l = list(
 ols.none.MAJ <- lm(pagerank10 ~
                  party_leadership
                + committee_leadership
-               + caucus_leader
+               + caucus_member
                + seniority_ln_scaled
                + les_ln_scaled
                + fold_nominate_scaled
@@ -1712,7 +1709,7 @@ ols.none.MAJ <- lm(pagerank10 ~
 ols.none.MIN <- lm(pagerank10 ~
                      party_leadership
                    + committee_leadership
-                   + caucus_leader
+                   + caucus_member
                    + seniority_ln_scaled
                    + les_ln_scaled
                    + fold_nominate_scaled
@@ -1726,7 +1723,7 @@ ols.none.MIN <- lm(pagerank10 ~
 ols.controlsExtra.MAJ <- lm(pagerank10 ~
                           party_leadership
                         + committee_leadership
-                        + caucus_leader
+                        + caucus_member
                         + seniority_ln_scaled
                         + les_ln_scaled
                         + fold_nominate_scaled
@@ -1749,7 +1746,7 @@ ols.controlsExtra.MAJ <- lm(pagerank10 ~
 ols.controlsExtra.MIN <- lm(pagerank10 ~
                               party_leadership
                             + committee_leadership
-                            + caucus_leader
+                            + caucus_member
                             + seniority_ln_scaled
                             + les_ln_scaled
                             + fold_nominate_scaled
@@ -1780,7 +1777,7 @@ texreg(l = list(
   , custom.coef.map = list(
     "party_leadershipYes" = "Party leadership"
     , "committee_leadershipYes" = "Committee leadership"
-    , "caucus_leaderYes" = "Caucus leader"
+    , "caucus_memberYes" = "Faction member"
     , "seniority_ln_scaled" = "log(Seniority)"
     , "les_ln_scaled" = "log(LES)"                    
     , "fold_nominate_scaled" = "Extremism"    
@@ -1813,7 +1810,7 @@ texreg(l = list(
   , caption = "Accounting for Member Influence Conditional on Majority Party Status"
   , custom.note = "\\texit{Note:} Coefficient estimates are bold at the 0.05 significance level."
   , label = "tab:majoritypartymodels"
-  , float.pos = "h"
+  , float.pos = "H"
 )
 
 
@@ -1873,7 +1870,7 @@ fig.partyLeadership <- modelsummary::modelplot(rev(models.all), coef_map = c("pa
 # Make pretty
 pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_partyLeadership.pdf")
 fig.partyLeadership +
-  ggtitle("Party Leadership Association with Influence") +
+  # ggtitle("Party Leadership Association with Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
@@ -1888,7 +1885,7 @@ fig.seniority <- modelsummary::modelplot(rev(models.all), coef_map = c("seniorit
 # Make pretty
 pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_seniority.pdf")
 fig.seniority +
-  ggtitle("Association between Seniority and Influence") +
+  # ggtitle("Association between Seniority and Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
@@ -1905,7 +1902,7 @@ fig.extremism <- modelsummary::modelplot(rev(models.all), coef_map = c("fold_nom
 # Make pretty
 pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_extremism.pdf")
 fig.extremism +
-  ggtitle("Association between Extremism and Influence") +
+  # ggtitle("Association between Extremism and Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
@@ -1923,7 +1920,7 @@ fig.committeeLeadership <- modelsummary::modelplot(rev(models.all), coef_map = c
 
 pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_committeeLeadership.pdf")
 fig.committeeLeadership +
-  ggtitle("Committee Leadership Association with Influence") +
+  # ggtitle("Committee Leadership Association with Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
@@ -1934,18 +1931,18 @@ fig.LES <- modelsummary::modelplot(rev(models.all), coef_map = c("les_ln_scaled"
 
 pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_LES.pdf")
 fig.LES +
-  ggtitle("Association between Legislative Effectiveness and Influence") +
+  # ggtitle("Association between Legislative Effectiveness and Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
 dev.off()
 
-# Expertise 3: Caucus leadership
-fig.caucusLeader <- modelsummary::modelplot(rev(models.all), coef_map = c("caucus_leaderYes" = ""))
+# Expertise 3: Faction membership
+fig.factionMember <- modelsummary::modelplot(rev(models.all), coef_map = c("caucus_memberYes" = ""))
 
-pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_caucusLeader.pdf")
-fig.caucusLeader +
-  ggtitle("Caucus Leadership Association with Influence") +
+pdf("/Users/mackenzieweiler/Library/CloudStorage/OneDrive-TheOhioStateUniversity/Dissertation/ch3/coefplot_factionMember.pdf")
+fig.factionMember +
+  # ggtitle("Faction Membership Association with Influence") +
   geom_vline(xintercept = 0) +
   guides(color = guide_legend(reverse = TRUE)) +
   scale_color_manual(values = unname(pals::alphabet(n = 15)))
@@ -1953,12 +1950,6 @@ dev.off()
 
 
 
-fig.majority <- modelsummary::modelplot(rev(models.all), coef_map = c("majority_party1" = ""))
-fig.majority +
-  ggtitle("Majority Party Association with Influence") +
-  geom_vline(xintercept = 0) +
-  guides(color = guide_legend(reverse = TRUE)) +
-  scale_color_manual(values = unname(pals::alphabet(n = 15)))
 
 
 
@@ -2067,26 +2058,26 @@ ggplot(dat_congressNets) +
 # DESCRIPTIVE STATS - Appendix
 ####################################################
 
-# # Distribution of pagerank scores
-# ggpubr::gghistogram(
-#   dat_congressNets
-#   , x = "pagerank_REVERSE"
-#   , bins = 100
-#   , color = "#0073C2FF"
-#     , fill = "#0073C2FF"
-#     , add = "mean"
-#   , rug = TRUE
-#   , xlab = "Influence Score"
-#     , ylab = ""
-#     , title = "Raw Distribution of PageRank Influence Scores"
-#   )
-# 
-# # Distribution of logged, scaled, pagerank scores
-# ggplot(dat_congressNets) +
-#   geom_boxplot(aes(revPageRank_1000_ln_scaled)) +
-#   theme_minimal() +
-#   labs(x = "PageRank influence score") +
-#   ggtitle("Distribution of Influence Scores")
+# Distribution of pagerank scores
+ggpubr::gghistogram(
+  dat_congressNets
+  , x = "pagerank_REVERSE"
+  , bins = 100
+  , color = "#0073C2FF"
+    , fill = "#0073C2FF"
+    , add = "mean"
+  , rug = TRUE
+  , xlab = "Influence Score"
+    , ylab = ""
+    # , title = "Raw Distribution of PageRank Influence Scores"
+  )
+
+# Distribution of logged, scaled, pagerank scores
+ggplot(dat_congressNets) +
+  geom_boxplot(aes(revPageRank_1000_ln_scaled)) +
+  theme_minimal() +
+  labs(x = "PageRank influence score") +
+  ggtitle("Distribution of Influence Scores")
 
 
 
@@ -2101,6 +2092,66 @@ dat_congressNets %>%
   write.csv("InfluenceScores.csv")
 
 
+
+#########
+# Appendix 3 - Summary stats of IVs
+########
+
+# ###
+# # Summary table - Independent vars
+# ###
+# dat_congressNets %>% 
+#   select(party_leadership
+#          , committee_leadership
+#          , caucus_member
+#          , seniority
+#          , les
+#          , fold_nominate
+#          , congress
+#          ) %>% 
+#   tbl_summary(
+#     by = congress
+#     , label = list(
+#       party_leadership ~ "Party leadership"
+#       , committee_leadership ~ "Committee leadership"
+#       , caucus_member ~ "Caucus member"
+#       , seniority ~ "Seniority"
+#       , les ~ "Legislative Effectiveness"
+#       , fold_nominate ~ "Folded DW-NOMINATE"
+#     )
+#     , missing_text = "Missing"
+#     , type = all_continuous() ~ "continuous2"
+#     , statistic = all_continuous() ~ c("{mean} ({sd})", "{min}, {max}")
+#   ) %>% 
+#   as_hux_table() %>% 
+#   huxtable::print_latex()
+# 
+# ###
+# # Summary table - Controls
+# ###
+# dat_congressNets %>% 
+#   select(votepct
+#          , race_ethnicity
+#          , gender
+#          , bills_cosponsored
+#          , votes_with_party_pct
+#          , congress
+#   ) %>% 
+#   tbl_summary(
+#     by = congress
+#     , label = list(
+#       votepct ~ "Winning vote pct."
+#     , race_ethnicity ~ "Race / Ethnicity"
+#     , gender ~ "Gender"
+#     , bills_cosponsored ~ "Bills cosponsored"
+#     , votes_with_party_pct ~ "Votes w/ party pct."
+#     )
+#     , missing_text = "Missing"
+#     , type = all_continuous() ~ "continuous2"
+#     , statistic = all_continuous() ~ c("{mean} ({sd})", "{min}, {max}")
+#     ) %>% 
+#   as_hux_table() %>% 
+#   huxtable::print_latex()
 
 
 #######
@@ -3030,8 +3081,8 @@ ggplot(data = group_by(firstObs_all, congress)) +
   guides(fill = "none") +
   labs(x = "", y = "") +
   theme_bw() +
-  theme(panel.spacing.x = unit(5, "mm")) +
-  ggtitle("Distribution of First Topic Usage by Congress")
+  theme(panel.spacing.x = unit(5, "mm"))
+  # ggtitle("Distribution of First Topic Usage by Congress")
 
 
 # Distribution of first use within XXth congress ~ topic
@@ -3045,8 +3096,8 @@ firstObs_all %>%
       theme(axis.text.x = element_blank()
             , axis.text.y = element_blank()
             , strip.text.x = element_text(size = 8)
-            ) +
-      ggtitle("Example distribution of first use by topic", subtitle = "116th Congress")}
+            )}
+      # ggtitle("Example distribution of first use by topic", subtitle = "116th Congress")}
 
 
 #######
@@ -3069,9 +3120,9 @@ ggplot(data = topics_df.R) +
         axis.ticks.y = element_blank()) +
   scale_y_continuous(labels = NULL) +
   labs(y = "", x = "") +
-  theme_minimal() +
-    ggtitle("Relative density plots of topics in the 113-116th Congress"
-            , subtitle = "Republicans")
+  theme_minimal()
+    # ggtitle("Relative density plots of topics in the 113-116th Congress"
+    #         , subtitle = "Republicans")
 
 # Facet wrap plot of all topics and density over time - Democrats
 ggplot(data = topics_df.D) +
@@ -3089,9 +3140,9 @@ ggplot(data = topics_df.D) +
         axis.ticks.y = element_blank()) +
   scale_y_continuous(labels = NULL) +
   labs(y = "", x = "") +
-  theme_minimal() +
-  ggtitle("Relative density plots of topics in the 113-116th Congress"
-          , subtitle = "Democrats")
+  theme_minimal()
+  # ggtitle("Relative density plots of topics in the 113-116th Congress"
+  #         , subtitle = "Democrats")
 
 
 

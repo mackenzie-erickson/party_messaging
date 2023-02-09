@@ -428,3 +428,26 @@ dev.off()
 
 
 
+########################################################
+# Plotting semantic coherence-exclusivity tradeoff:
+searchKresults.D <- readRDS(paste0(getwd(), "/Data/output/kTopics/2022-07-19_searchKresults_20-35_houseD.RDS"))
+searchKresults.R <- readRDS(paste0(getwd(), "/Data/output/kTopics/2022-07-19_searchKresults_20-35_houseR.RDS"))
+
+
+plot(searchKresults.D)
+plot(searchKresults.R)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
